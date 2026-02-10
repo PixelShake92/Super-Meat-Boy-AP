@@ -30,7 +30,7 @@ WORLD_NAMES = {
 }
 
 
-# LEVEL NAMES — verbatim from SMBDatabase.cs
+# LEVEL NAMES — 
 # Indexed as LEVEL_NAMES[world_0idx][type_idx][level_0idx]
 # type_idx: 0=light, 1=dark, 2=warp
 
@@ -62,7 +62,7 @@ LEVEL_NAMES = [
     # World 5 - Rapture
     [
         ["the witness", "evangel", "Ripe Decay", "Rise", "Panic Switch", "Left Behind", "The Fallen", "Descent", "Abomination", "Grinding Mill", "Heretic", "10 Horns", "The Lamb", "King Carrion", "The Flood", "Rotgut", "The Kingdom", "Gate of Ludd", "Wrath", "Judgment"],
-        ["The Clot", "Loomer", "Spank", "Alabaster", "Nix", "Ripcord", "Downpour", "Downer", "Swine", "Pulp Factory", "Blight", "Canker", "Halo of Flies", "Necrosis", "Choke", "Coil", "Millenium", "Stain", "Magog", "Quietus"],
+        ["The Clot", "Loomer", "Spank", "Alabaster", "Nix", "Ripcord", "Downpthe", "Downer", "Swine", "Pulp Factory", "Blight", "Canker", "Halo of Flies", "Necrosis", "Choke", "Coil", "Millenium", "Stain", "Magog", "Quietus"],
         ["Skyscraper", "Skyscraper", "Skyscraper", "The Guy!", "The Guy!", "The Guy!", "Sunshine Island", "Sunshine Island", "Sunshine Island", "Meat is Death", "Meat is Death", "Meat is Death"],
     ],
     # World 6 - The End
@@ -78,7 +78,7 @@ LEVEL_NAMES = [
 ]
 
 
-# PAR TIMES — verbatim from SMBDatabase.cs
+# PAR TIMES — 
 # Indexed as PAR_TIMES[world_0idx][type_idx][level_0idx]
 # type_idx: 0=light, 1=dark, 2=warp
 # A+ grade = time <= par_time
@@ -221,14 +221,14 @@ WARP_ZONE_NAMES = {
 #   BUT the order depends on which zone each host actually leads to.
 #   This was verified empirically via bandage pattern matching.
 #
-# From our verified documentation:
+# From the verified documentation:
 #   W1: 1-5→Sky Pup(z0), 1-12→Commander(z1), 1-19→HHH(z2), 1-13X→Space Boy(z3)
 #   W2: 2-15→Blood Shed(z0), 2-8→Bootlicker(z1), 2-12→Castle Crushers(z2), 2-5X→1977(z3)
 #   W3: 3-7→Tunnel Vision(z0), 3-16→Jump Man(z1), 3-5→Cartridge Dump(z2), 3-8X→Kontra(z3)
 #   W4: 4-8→zone0(Key Master?), 4-18→Fly Guy(z1), 4-14→zone2(Brimstone?), 4-7X→MMMMMM(z3)
 #   W5: 5-1→zone0(Skyscraper), 5-7→The Guy(z1), 5-12→zone2(Sunshine Island), 5-20X→MiD(z3)
 #
-# Note: For W4, our verified slot mapping says zone0=slots0-2, zone1=slots3-5, etc.
+# Note: For W4, the verified slot mapping says zone0=slots0-2, zone1=slots3-5, etc.
 # LevelNames says slots0-2="Key Master", slots3-5="Fly Guy", slots6-8="Brimstone", slots9-11="mmmmmm"
 # So zone0=Key Master (host 4-8), zone2=Brimstone (host 4-14). This is consistent.
 
@@ -738,44 +738,44 @@ def get_location_name(loc_id: int) -> str:
 #
 # The client's _BANDAGE_RAW uses (world, 0-indexed save_index, region, name).
 
-# W1 Light: Our=[3,6,8,10,12,17,19]+1=[4,7,9,11,13,18,20]  DB=[4,7,9,11,13,18,20]  ✓ MATCH
-# W1 Dark:  Our=[2,4,9,13,14,16,18]+1=[3,5,10,14,15,17,19] DB=[3,5,10,14,15,17,19] ✓ MATCH
-# W1 Warp:  Our=[0,1,7,8,10,11]+1=[1,2,8,9,11,12]          DB=[1,2,8,9,11,12]       ✓ MATCH
+# W1 Light: the=[3,6,8,10,12,17,19]+1=[4,7,9,11,13,18,20]  DB=[4,7,9,11,13,18,20]  ✓ MATCH
+# W1 Dark:  the=[2,4,9,13,14,16,18]+1=[3,5,10,14,15,17,19] DB=[3,5,10,14,15,17,19] ✓ MATCH
+# W1 Warp:  the=[0,1,7,8,10,11]+1=[1,2,8,9,11,12]          DB=[1,2,8,9,11,12]       ✓ MATCH
 #
-# W2 Light: Our=[1,4,9,12,15,17,19]+1=[2,5,10,13,16,18,20] DB=[2,5,10,13,16,18,20]  ✓ MATCH
-# W2 Dark:  Our=[3,5,6,9,11,14,15]+1=[4,6,7,10,12,15,16]   DB=[4,6,7,10,12,15,16]   ✓ MATCH
-# W2 Warp:  Our=[0,2,6,7,9,11]+1=[1,3,7,8,10,12]           DB=[1,3,7,8,10,12]        ✓ MATCH
+# W2 Light: the=[1,4,9,12,15,17,19]+1=[2,5,10,13,16,18,20] DB=[2,5,10,13,16,18,20]  ✓ MATCH
+# W2 Dark:  the=[3,5,6,9,11,14,15]+1=[4,6,7,10,12,15,16]   DB=[4,6,7,10,12,15,16]   ✓ MATCH
+# W2 Warp:  the=[0,2,6,7,9,11]+1=[1,3,7,8,10,12]           DB=[1,3,7,8,10,12]        ✓ MATCH
 #
-# W3 Light: Our=[0,1,3,9,10,17,19]+1=[1,2,4,10,11,18,20]   DB=[1,2,4,10,11,18,20]   ✓ MATCH
-# W3 Dark:  Our=[2,4,5,6,13,15,18]+1=[3,5,6,7,14,16,19]    DB=[3,5,6,7,14,16,19]    ✓ MATCH
-# W3 Warp:  Our=[0,2,6,8,10,11]+1=[1,3,7,9,11,12]          DB=[1,3,7,9,11,12]        ✓ MATCH
+# W3 Light: the=[0,1,3,9,10,17,19]+1=[1,2,4,10,11,18,20]   DB=[1,2,4,10,11,18,20]   ✓ MATCH
+# W3 Dark:  the=[2,4,5,6,13,15,18]+1=[3,5,6,7,14,16,19]    DB=[3,5,6,7,14,16,19]    ✓ MATCH
+# W3 Warp:  the=[0,2,6,8,10,11]+1=[1,3,7,9,11,12]          DB=[1,3,7,9,11,12]        ✓ MATCH
 #
-# W4 Light: Our=[1,5,7,10,14,17,19]+1=[2,6,8,11,15,18,20]
+# W4 Light: the=[1,5,7,10,14,17,19]+1=[2,6,8,11,15,18,20]
 #           DB=[2,6,9,13,16,17,20]
-#           ✗ DISCREPANCY at positions 3-6: ours=[8,11,15,18] vs DB=[9,13,16,17]
+#           ✗ DISCREPANCY at positions 3-6: thes=[8,11,15,18] vs DB=[9,13,16,17]
 #
-# W4 Dark:  Our=[0,2,3,4,6,8,9]+1=[1,3,4,5,7,9,10]
+# W4 Dark:  the=[0,2,3,4,6,8,9]+1=[1,3,4,5,7,9,10]
 #           DB=[3,4,8,10,14,18,19]
 #           ✗ SEVERE DISCREPANCY — almost entirely wrong
 #
-# W4 Warp:  Our=[1,2,6,8,9,10]+1=[2,3,7,9,10,11]
+# W4 Warp:  the=[1,2,6,8,9,10]+1=[2,3,7,9,10,11]
 #           DB=[2,3,8,9,11,12]
 #           ✗ DISCREPANCY at slots 3-6
 #
-# W5 Light: Our=[1,4,6,7,10,13,17]+1=[2,5,7,8,11,14,18]
+# W5 Light: the=[1,4,6,7,10,13,17]+1=[2,5,7,8,11,14,18]
 #           DB=[3,5,9,12,16,18,20]
 #           ✗ SEVERE DISCREPANCY
 #
-# W5 Dark:  Our=[0,3,5,9,12,14,18]+1=[1,4,6,10,13,15,19]
+# W5 Dark:  the=[0,3,5,9,12,14,18]+1=[1,4,6,10,13,15,19]
 #           DB=[4,5,8,10,11,17,18]
 #           ✗ SEVERE DISCREPANCY
 #
-# W5 Warp:  Our=[0,2,7,8,9,11]+1=[1,3,8,9,10,12]
+# W5 Warp:  the=[0,2,7,8,9,11]+1=[1,3,8,9,10,12]
 #           DB=[2,3,7,9,10,11]
 #           ✗ DISCREPANCY
 #
 # CONCLUSION: W1-W3 bandage data is PERFECT. W4-W5 has significant errors.
-# The W4/W5 level names in our data are also wrong (names that don't exist
+# The W4/W5 level names in the data are also wrong (names that don't exist
 # in the game, e.g. "Goat Climber", "Wormwood", "Anvil", "Flamin'").
 # SMBDatabase.cs should be treated as authoritative.
 #
