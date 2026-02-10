@@ -1,7 +1,6 @@
 """
 Super Meat Boy — Authoritative Game Data Module
-================================================
-Extracted from Jaex/SMBStats SMBDatabase.cs + verified memory research.
+
 
 Contains:
   - Level names (all worlds, light/dark/warp)
