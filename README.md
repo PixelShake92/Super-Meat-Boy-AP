@@ -1,6 +1,6 @@
-# 🥩 Super Meat Boy — Archipelago Randomizer
+# 🥩 Super Meat Boy — Archipelago randomiser
 
-A full [Archipelago](https://archipelago.gg) multiworld randomizer for **Super Meat Boy** (PC/Steam).
+A full [Archipelago](https://archipelago.gg) multiworld randomiser for **Super Meat Boy** (PC/Steam).
 
 Shuffle level access, boss keys, characters, bandages, warp zones, and more across your multiworld. Race through randomized worlds while trading items with friends playing completely different games.
 
@@ -8,7 +8,7 @@ Shuffle level access, boss keys, characters, bandages, warp zones, and more acro
 
 ## Features
 
-- **Full chapter randomizer** — World access is gated by Chapter Keys received from the multiworld
+- **Full chapter randomiser** — World access is gated by Chapter Keys received from the multiworld
 - **Boss key system** — Collect boss keys to unlock boss fights, with configurable requirements
 - **Dark world integration** — A+ Rank items unlock dark world counterparts of each level
 - **Bandage checks** — Bandage collectibles become location checks sent to the multiworld
@@ -130,4 +130,4 @@ pyinstaller smb_ap_client.spec
 
 This project is not affiliated with or endorsed by Team Meat. Super Meat Boy is a trademark of Team Meat.
 
-This is a fan-made tool for use with the Archipelago multiworld randomizer framework.
+This is a fan-made tool for use with the Archipelago multiworld randomiser framework.
