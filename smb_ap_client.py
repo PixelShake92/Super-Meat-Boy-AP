@@ -1,33 +1,3 @@
-#!/usr/bin/env python3
-"""
-Super Meat Boy - Archipelago Client (v2.1.0)
-A GUI client for connecting Super Meat Boy to Archipelago multiworld.
-
-Features:
-- Dark theme GUI with colored log output
-- Automatic game detection and memory integration
-- World access control via memory manipulation
-- Bandage tracking and granting
-- Boss completion detection
-- Boss Token system (cumulative token-based boss access)
-- Goal completion notification
-- A+ grade detection (time <= par from SMBDatabase.cs)
-- Character unlock tracking (warp slots 3-5)
-- Warp zone completion tracking
-- W7 (Cotton Alley) level tracking
-- GotWarp bit (0x08) detection on host levels
-- Achievement locations (world clears, milestones, Golden God, Girl Boy)
-- Initial sync scan for pre-existing progress
-- Corrected W4/W5 bandage data from SMBDatabase.cs
-
-Requirements:
-    pip install pymem websockets
-
-Usage:
-    python smb_ap_client.py
-    (smb_game_data.py must be in the same directory)
-"""
-
 import asyncio
 import json
 import struct
@@ -47,333 +17,253 @@ user32 = ctypes.windll.user32
 VK_ESCAPE = 0x1B
 KEYEVENTF_KEYUP = 0x0002
 
-# Check dependencies
+# When frozen by PyInstaller, show errors as messageboxes instead of prints
+def _fatal_error(msg):
+    try:
+        import tkinter as _tk
+        root = _tk.Tk()
+        root.withdraw()
+        _tk.messagebox.showerror("SMB AP Client - Error", msg)
+        root.destroy()
+    except:
+        print(msg)
+    sys.exit(1)
+
 try:
     import pymem
 except ImportError:
-    print("ERROR: pymem library required!")
-    print("Install with: pip install pymem")
-    sys.exit(1)
+    _fatal_error("pymem library not found!\n\nIf running from source:\n  pip install pymem")
 
 try:
     import websockets
 except ImportError:
-    print("ERROR: websockets library required!")
-    print("Install with: pip install websockets")
-    sys.exit(1)
+    _fatal_error("websockets library not found!\n\nIf running from source:\n  pip install websockets")
 
-# Import game data module
 try:
-    from smb_game_data import (
-        # Constants
-        BASE_ID, WORLD_NAMES, LEVEL_NAMES, PAR_TIMES, NUM_LEVELS,
-        FLAG_BANDAGE, FLAG_COMPLETE, FLAG_WARP,
-        MASK_CLEAR_BANDAGE, MASK_CLEAR_WARP,
-        # Save structure
-        WORLD_BASES, LIGHT_OFFSET, DARK_OFFSET, WARP_OFFSET,
-        SLOT_SIZE, COMP_BYTE, TIME_BYTE, NUM_WARP_SLOTS,
-        # Bandage data
-        LIGHT_BANDAGE_LEVELS, DARK_BANDAGE_LEVELS, WARP_BANDAGE_SLOTS,
-        CORRECTED_BANDAGE_DATA, CORRECTED_BANDAGE_BY_ADDR,
-        # Warp & character data
-        LIGHT_WARP_HOST_LEVELS, DARK_WARP_HOST_LEVELS,
-        WARP_HOST_TO_ZONE, WARP_ZONE_NAMES,
-        CHARACTER_WARPS, CHARACTER_WARP_SLOTS,
-        # Address helpers
-        comp_addr, time_addr, slot_addr,
-        # Par time / A+ helpers
-        get_par_time, is_a_plus, get_level_name, get_warp_zone_name,
-        # Location ID functions (existing)
-        level_location_id, w6_level_location_id, w6_dark_level_location_id,
-        dark_level_location_id, boss_location_id, dark_boss_location_id,
-        # Location ID functions (new)
-        get_completion_location_id, get_aplus_location_id,
-        w7_light_location_id, w7_dark_location_id,
-        character_unlock_location_id, warp_completion_location_id,
-        world_clear_location_id, world_dark_clear_location_id,
-        w6_clear_location_id, w6_dark_clear_location_id,
-        w7_clear_location_id, w7_dark_clear_location_id,
-        bandage_milestone_location_id, BANDAGE_MILESTONES,
-        golden_god_location_id, girl_boy_location_id,
-        # Comprehensive name resolver
-        get_location_name,
-    )
+    from smb_apworld_data import (
+        # Item IDs
+        ITEM_OFFSET, LOC_OFFSET,
+    ITEM_BANDAGE, ITEM_BOSS_TOKEN, ITEM_VICTORY,
+    ITEM_DW_DR_FETUS_KEY, ITEM_CH7_LW_LEVEL_KEY, ITEM_CH7_DW_LEVEL_KEY,
+    ITEM_DEGRADED_BANDAGE,
+    ITEM_MEAT_BOY, ITEM_BANDAGE_GIRL,
+    ITEM_COMMANDER_VIDEO, ITEM_JILL, ITEM_OGMO, ITEM_FLYWRENCH,
+    ITEM_THE_KID, ITEM_JOSEF, ITEM_NAIJA, ITEM_STEVE,
+    CHAPTER_KEY_ITEMS, BOSS_KEY_ITEMS, CHARACTER_ITEMS, APLUS_RANK_ITEMS,
+    aplus_item_id,
+    # Location name generators
+    light_completion_name, dark_completion_name,
+    light_aplus_name, dark_aplus_name,
+    light_bandage_name, dark_bandage_name,
+    lw_warp_completion_name, dw_warp_completion_name,
+    lw_warp_bandage_name, dw_warp_bandage_name,
+    boss_location_name, cutscene_location_name,
+    xmas_completion_name, xmas_aplus_name, xmas_bandage_name,
+    # Data tables
+    WORLD_NAMES, NUM_LEVELS,
+    LIGHT_LEVEL_NAMES, DARK_LEVEL_NAMES,
+    LW_WARP_NAMES, DW_WARP_NAMES,
+    BOSS_LOC_NAMES, DARK_BOSS_LOC_NAME,
+    CUTSCENE_LOC_NAMES,
+    LIGHT_BANDAGE_LEVELS, DARK_BANDAGE_LEVELS,
+    BANDAGE_GRANT_TARGETS,
+    # Achievement / speedrun / deathless data
+    WARP_MILESTONE_NAMES, WORLD_CLEAR_NAMES,
+    BANDAGE_MILESTONE_NAMES,
+    SPEEDRUN_ACHIEVEMENTS, DEATHLESS_ACHIEVEMENTS,
+    DEATH_COUNT_OFFSET,
+    XMAS_LEVEL_NAMES, XMAS_ACHIEVEMENT_NAMES, XMAS_WORLD,
+    # Memory layout
+    WORLD_BASES, LIGHT_OFFSET, DARK_OFFSET, WARP_BASES, W6_DARK_OFFSET,
+    SLOT_SIZE, COMP_BYTE, TIME_BYTE, NUM_WARP_SLOTS,
+    FLAG_BANDAGE, FLAG_COMPLETE, FLAG_WARP, MASK_CLEAR_BANDAGE,
+    ADDR, TYPE_LIGHT, TYPE_DARK, TYPE_WARP_MIN, TYPE_WARP_MAX,
+    BOSS_LEVEL_INDEX, CHARACTER_BITMASK_OFFSET,
+    BOSS_COUNTER_OFFSETS, BOSS_UNLOCK_THRESHOLDS,
+    # Address helpers
+    comp_addr, time_addr, slot_addr,
+    # Par time helpers
+    get_par_time, is_a_plus,
+    # Type helpers
+    type_to_region, is_warp,
+    PAR_TIMES,
+)
 except ImportError:
-    print("ERROR: smb_game_data.py not found!")
-    print("Place smb_game_data.py in the same directory as this client.")
-    sys.exit(1)
+    _fatal_error("smb_apworld_data.py not found!\n\n"
+                 "This file must be in the same directory as the client.")
 
 
-# =============================================================================
-# W6/W7 ADDRESS CORRECTIONS
-# =============================================================================
-# W6 (The End) has only 5 levels, no warps. Game packs it as 10 slots (5L+5D)
-# instead of the standard 52-slot layout. This means:
-#   W6 dark offset = 0x3C (not 0x0F0)
-#   W7 base = 0x0D08 
-WORLD_BASES[7] = 0x0D08
-W6_DARK_OFFSET = 0x3C  # 5 light slots Ã— 12 bytes
 
-_orig_comp_addr = comp_addr
-_orig_time_addr = time_addr
-_orig_slot_addr = slot_addr
-
-
-def comp_addr(world, index, region):
-    if world == 6 and region == "dark":
-        return WORLD_BASES[6] + W6_DARK_OFFSET + index * SLOT_SIZE + COMP_BYTE
-    if world == 6 and region == "warp":
-        return None  # W6 has no warps
-    if world == 7 and region == "warp":
-        return None  # W7 has no warps
-    return _orig_comp_addr(world, index, region)
-
-
-def time_addr(world, index, region):
-    if world == 6 and region == "dark":
-        return WORLD_BASES[6] + W6_DARK_OFFSET + index * SLOT_SIZE + TIME_BYTE
-    if world == 6 and region == "warp":
-        return None
-    if world == 7 and region == "warp":
-        return None
-    return _orig_time_addr(world, index, region)
-
-
-def slot_addr(world, index, region):
-    if world == 6 and region == "dark":
-        return WORLD_BASES[6] + W6_DARK_OFFSET + index * SLOT_SIZE
-    if world == 6 and region == "warp":
-        return None
-    if world == 7 and region == "warp":
-        return None
-    return _orig_slot_addr(world, index, region)
-
-
-# =============================================================================
 # CONSTANTS
-# =============================================================================
+
 
 APP_NAME = "Super Meat Boy - Archipelago Client"
-APP_VERSION = "2.3.0"
+APP_VERSION = "3.5.0"
 GAME_NAME = "Super Meat Boy"
-
 CONFIG_FILE = Path.home() / ".smb_ap_client.json"
 
-# Dark theme colors
-DARK_BG = "#1a1a1a"
-DARK_FG = "#e0e0e0"
-DARK_ENTRY_BG = "#2d2d2d"
-DARK_FRAME_BG = "#242424"
-DARK_ACCENT = "#3d3d3d"
-DARK_BORDER = "#404040"
+# SMB Theme colors
+DARK_BG = "#1e1e1e"         # Clean dark background
+DARK_FG = "#e0e0e0"         # Standard light text
+DARK_ENTRY_BG = "#2a2a2a"   # Input fields
+DARK_FRAME_BG = "#242424"   # Frame background
+DARK_ACCENT = "#5a2020"     # Muted red buttons
+DARK_BORDER = "#7a3030"     # Hover red
+SMB_RED = "#c81e1e"         # Header accent only
+SMB_BANDAGE = "#b0a090"     # Subtitle color
 
-# Memory addresses (v1.2.5 Steam)
-ADDR = {
-    "playing":      0x30a1c8,
-    "world":        0x2f79ac,
-    "level_beaten": 0x30a1e0,
-    "level":        (0x30ac90, 0x8dc),
-    "lvl_type":     (0x30a1a0, 0x3c68),
-    "save_ptr":     0x30a380,
-    "world_unlock": 0x3954,
-    "ui_state":     (0x30ac90, 0x8e0),
-    "level_trans":  0x30ad00,
-}
+# Embedded Meat Boy icon (32x32, base64 GIF)
+MEATBOY_ICON_32 = (
+    "R0lGODlhIAAgAIcAAP////3///f4+Pb09PDw8Ovu7ubp6d/o6OLl5dzh4dbY2NPR0cbS0bu9vaeq"
+    "qamfoJqZmZihoamSkpKVlI57e3aAgXlwcX9VWHNNTmNCQ3gpK18yNDk6OogaJ28aGmoYKlwlJlge"
+    "HjcfHzwVFx8ZGhIZGXUMFXIHCXEGCGQNFGIICVYHCVEGB1AICVAGB08GCEwGCEkICUUHCD4GBzoH"
+    "CDUJDTIJCjYGBy8GCCsICB8NDR8JCh4ICCUHCBwGBxkICRsGBxYGCBUICRQHCBQGBg4KChEICQ0H"
+    "BwkJCQkHCAcGBwALCwUGBgIGBQAGBqgCBKUCAqMCA6EDBKECA6ECAqACAZ4DAp4CA54CAp0DBJ0C"
+    "A5sEBJsDApoDApkDA5oCApkCAZgCApgCAZgCAJYCA5YCApYCAZUDBJUCApECAo0EBY0CA4sCBIkD"
+    "A4YCA4QCA4ICAoECAn8CA30FBnwCA3gCA3cCBHUCAnMDA3EFBnACA20DBGoCA2gCBGYEBWICBF0E"
+    "BVwEBVcDBFMEBFAFBkUDAzkDBDAFBigEBSYFBiEEBhsDBBkDBBYDBBIFBQ8EBA4EBAkDAwYFBgMF"
+    "BgIEBAMDAwIDBAAFBQAEBQEDAgECAgACAwACAgACAaoBAqcBAaQBAqMBAaMBAKIBAqIBAaEBAKAB"
+    "AZ8BAZ8BAJ4BAZ0BAp0BAZ0BAJwBApwBAZwBAJsBApsBAZsBAJoBApoBAZoBAJkBA5kBApkBAZgB"
+    "ApgBAZkBAJgBAJcBApcBAZcBAJYBA5YBApYBAZUBA5UBAJQBApMBApIBApIBAZABAY8BAo4BAo0B"
+    "AowBAokBAoYBAoQBAYABAX4BAnsBAnkBAnUBAXQBAnIBAgwBAgEBAQABAgABAQABAJ8AAJ4AAp0A"
+    "AJwAApoAApoAAZoAAJgAAZcAApYAAJUAApUAAJEAAI4AAIoAAYgAAYUAAYMAAn4AAH0AAHQAAHEA"
+    "GWoAAC8AAhMAAwIAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACH5BAEAAAAALAAAAAAgACAA"
+    "QAj/APEJHEiwoMGDBO1xuwGKlrpBguJFOyeuGK9du3hVsSaCRCM/p4rl4FTQCQpYZHClUrMhQoIA"
+    "AGLKBIDAQIQVpjDymkVHmjMVTfDZ23bDk6xXr7xBW2eoE75t2zgVWkdrVy1Xya4JwXcPYVRMSerR"
+    "kxEDBiEXLVi4eAFDBg0cQS5pMtiV0RQ5HzrIk0dnHTpz6tKhQzeO3Tt41NxRcQMIRps6rdQ0wtRj"
+    "zx9Uu4Bd5MV5FxhYsWjx6nWrFhphvuIgutcVoevXsGPLTqhphhQouE0wYOAhlplyxYT9+kVMjKtd"
+    "xFI1c8Q1Ib5EnqqV4BCpkqFWvnDplKXsUSV8RZBM/1OFKBOKKz+42rt0wpOWQZcmKEAQQEQlAQUI"
+    "JFhwoEGEJYuckUswshzzBxrDxPDCJ3fY4U0uvHQRxTfszMPHCSmsgMI17aDTzS+0PKPHID0wsUlC"
+    "nLTwCRukPQOHNO0400wzzDATjR7UlFPLLrfEwUhzBlEyyRGPYAOJJE4ENVA2SQCBQw2HJOJDEpbM"
+    "ZuWVWGapJUH3XDLEDYSgAM8FHawSRSihjELKmmuWYgoWXrDAhEH2aOPCJ8l4IYUGFFCQRxW+2FJV"
+    "Rqak0w4ap+ySjCLb2NOaUAs9YcwIFiwRSR2mnKMLRlYVo4MDHOATyRq0IMLJEDwo0VVXPEwBRz0z"
+    "fP/wQQpuYAHGFlx00UUWimyCSQkkKFMGIk7MsQwij0gylA1PhBFIDRdgsAEGIYSQwQYbgBACCB9o"
+    "oEIfbpShihZsBBKMHD9ss4MVt9ySRg0VLKAAAQ5AQIAAAwhgwAIOWLBNHqIQw0ssd+ARyxs+2BAF"
+    "HGyA0wsr6MxjrQUUPCCBxRJckMEc3YxhjDjfHMMHDUcwkY0RfFizRyrk7PiLGFlskQY71Vzjzhdw"
+    "imFVL3UsQhJrA0lixCCipLFGOLSwggorrsjidC3gwIIML2X0oks0PWzzqED2ZCJDKMLggssxewiC"
+    "CCRB7LDDIobw8Yw4nOlyBxFADtQVEX7UMQ0ddvwbMYgP2ThqDyUzTLMMOcI0Q00gRWzp+OOQXxkQ"
+    "ADs="
+)
 
-TYPE_LIGHT = 0
-TYPE_DARK = 1
-TYPE_WARP_MIN = 2
-TYPE_WARP_MAX = 5
-BOSS_LEVEL_INDEX = 20
+# Embedded Meat Boy icon (48x48 for header, base64 GIF)
+MEATBOY_ICON_48 = (
+    "R0lGODlhMAAwAIcAAP/////+/v7+/vr+/vv6+vf6+vX29vDw8Ozt7Obm5uDm5t3e3tHR0cDDw7q7"
+    "vLWwsKalpaecnKeTk5CSkpSAgIGCgXZ/f4NnaGtoaFlbW2ZGRkU3OXQwMUctLzkrLYcTNH0RMGoU"
+    "JVobHEohIU8QFj4cHTQTFh0VFQ8SEg8MDJgGB4gHCXIGCG0HCWAGCFIHCkkHDj8GBzQJCjgFBi0I"
+    "CicICiQJCiMGCCEJCiEGCh0JChwHCBYJCxcHCBIJCg4JCgoLCwoJCQ4GBwoHBwcKCwULCwQLCwYJ"
+    "CQcHBwUFBQQGBwIKCwEJCQIICAAHCAIGBgAGBwIFBQAFBQAFBLYCBK0DA6gDBKQDBKMCAqEDA58E"
+    "BZ8DA54DA6ACA58CA54CAp0EBZ0DBJwDAp0CAZsCA5kDBJoCA5oCAZkCApYDBJUDBZcCApYCApUC"
+    "A5MDBJMCApADA5ECAo4DBI4CA4sCBIoDBYoCA4YDBYYCA4MDBIECA34CA30CBHkCAnUDBXUCA3ID"
+    "BXAEBW8CBGwDA2gDBGUDA2EDBGADBF4DBFwCA1oDBFcDBVIEBE8DBEwDBUoDBEcEBEQCBDoDBC8D"
+    "BCQDBhoDBA8DAwsDBAcDBAMDAwIDAwEDAwAEBAADAwADAgACAqgBAqUBAqQBAaIBAqEBAZ8BAZ4B"
+    "Ap4BAJ0BApwBApwBAZ0BAJwBAJsBApsBAZsBAJoBApoBAZoBAJkBA5kBApkBAZkBAJgBApgBAZgB"
+    "AJcBApcBAZcBAJYBApYBAZUBApYBAJUBAJQBApIBApABAo4BAo0BAYoBAocBAoUBAYMBAYEBAn8B"
+    "AX0BAnoBAXkBAXYBAnMBA20BAyEBAgIBAQEBAQABAgABAQABAKcAAaMAAZ8AAZsAApwAAJoAA5oA"
+    "ApoAAZoAAJkAApkAAZkAAJgAApcAApgAAJYAAZIAAYsAAYcAAYQAAIIAAYAAAX0AAHcAAWkABGQA"
+    "BVoAAEkAACgAAAkAAQMAAQIAAQIAAAEAAQEAAAAAAQAAAAAAAAAAACH5BAEAAAAALAAAAAAwADAA"
+    "QAj/APsJHEiwoMGDCBMW1PfEiI4YiPzIucKGgoRC6FCRixWO3LhytkKSCynrFatT2kRVwXPjicJ+"
+    "+6CwCLWGksB7NXLkcDQsVq6QQEmyqdTvHqZ8Hk5M8lLrj6VqN8KIArQEZlEjfLDYMZUr1xc8HSoY"
+    "AHAAgFmzAQIAIBBAgIEFABwcyFAPTNBc3PAsglYLVZcZnAQS4eEj0Chea+7o+sbNVtfHkH/a+uat"
+    "Fi5estr8Cqcr2SEg114KrMZJipPQ/fhBkRIlyb6D1I4wCUKYh5AhSJpA2SS6t+/fBq/5KIMKF64s"
+    "aZCxO9fHhZtvsX4JCxoyV5dCluxZmtRnTLlU0lLw/0a4bx8QN6NuvXk0aYQGDR1KwB8xwsSGDTLi"
+    "kzAhY8QMGC80cgggcrAByy1qoEIHJHwUY4ckRfRAhyrKKJIHKuXUAlQuvJzRBRhyrLOOM4XIE080"
+    "6xQjChZm8AIULckQEskNQEDxyWsH7cPEC6AEIxku3wjjTDN96CBFP5xEMYUU13SSSDvJxBJULcS8"
+    "A0kRwGWp5ZZccrlPPvng06RpRChxiQ477GBDJTfU4GYNN9xggw49+PCDEqt1ks9L+XxCAxXDCIMO"
+    "MGIwg0EDCTggQhlo2ELLLWZoGBQvuLwiSy67hHTGIkrgmGM/QahhyhaCnOBABvxwUskdrvTyyy3U"
+    "hf+kgj0YJJABNZhYE8kosURzCTZR8LBDCkkUdM8ngYSCDgwgfADCsyC0UMYWpXzxBRdbjCHGGGOE"
+    "wYIijDTCiCSS1KFKHIfQ0AMjV0iDBx12xNBEP/kswQIVbbwRyiKfpGDBBAQoIMADAk0gQAEFmDWA"
+    "AAkAUAEEJ9xTSRrbmKNLLbmwIowib6RiChs4EJFHKMb4UUY54mB8xhXs0FOCBxlIcEEEEkRAQQMS"
+    "5HzBBh3Es4ormIrTjSyywHIMIY7owEQTmvSDBBGN4MGIH6TkUss34MQqCyuxzPINLrfAYmktF4ck"
+    "paPMEGKPaPkwMVMbc3CTCy3LPCOIINH00cwe7iz/s0w7yiwjCCLSOANSdbMgw6lo+3xyQzPHFENM"
+    "McXMsUwf0Cjya0HXDFGIHse0soopY+BiTDPtxIBll6y37vrrsMcu++yx59MJJ1NAIQQOMUTCyApq"
+    "pFFGGGFoEca1XxAPBhlmpAFHHXmw8MIORWSi0D6aFGZFFVaIssoV8VAAwAQcoGOGLeOI08sbsTrW"
+    "FS/ABIPLI094atA+1uzARS8a8iJGMO+5QAXmkQUX9YIMZwPKLrKgBTfEgQulyJQqCoGEaiTkNUhw"
+    "gyl6sYV52EMIlpjBHbLxDXGY4w24oM4utoAIIFggA/3oBCb4kIpWROMHoflEJ5pmrE3UQRtaqMcG"
+    "/yoAhIEUohTmGMc4JFUdVszBEkXshwX7MYlWcOMPl+iHD1bAhRcUwX77WEILtNGFSAhBBM8KwQdI"
+    "8I5W8CIyjuGFF2ZgDWt8oh8eQMEhsuALaAhhCjhIQxwcIYRLVO8mnQhEj1zQLBC4oAXQYEc73OGO"
+    "dkjSHccwhjHUEQxSiAIUoKxCFUaBCjvkYRaBUIMdDDEKboACEALZBydkQIVb0MINNegHBhCgAAQ4"
+    "AAAPOMEJLgCABETAAAygAAMggAALKMAC/ZDCIuRQizZoCBdtiIQedoEHPthgH1GgAYtg8QtwqMAS"
+    "GHgABBbwAGQ2YAIMMMAB5nkABCRgAgrIwARScP8NRZACGO77hhkGQYhjHCMPkDgCFGRQhWLQoQu7"
+    "AIc5TJGOSAyRAQggAAAUAIACCGAAAAApABrAgAVMQARrOEMtwPEYXKwBGcwYhCIUwYNO0MAK4igG"
+    "IuAAjlmczxa84IIVzvGOedBDBCLggFJHwAGkQvIcV1hDLl5BDGckAxl6MMQkfOCETeSjPP0wgiT2"
+    "4IxE+KEUGXJMUHBhDmLgAQ97IGgh/FCHNrChF7Soji1koYs9GAIJmrDfQGSJAz84YhCH4YYw3nAp"
+    "6kjGFuAYiS0sUzZZwMEN3egFMwqBw5dcwwks0MYa8gAHVbQ1F6cgBSlMgQpVsIIVlrqUL4SRjHeR"
+    "BEMWtLjULZCRiGK9JIwuyEYwwDGOXIxjFll9xAwsAUIe6AAHNqDENCSBCEGoozHV0YUyHOEJwRpk"
+    "T5AABTBkEZKrEQMa8HhGJbCxp4FUYwiHeIYwWCqZVizDGZCoimgyAYQdTEISkQhwJGZAiR6kAAiC"
+    "rQYQcNAIwkEDGtEohCIaMYMUIIF2GM6whjfMYYMEBAA7"
+)
 
-# Item IDs (must match APWorld)
-ITEM_WORLD2 = BASE_ID + 1
-ITEM_WORLD3 = BASE_ID + 2
-ITEM_WORLD4 = BASE_ID + 3
-ITEM_WORLD5 = BASE_ID + 4
-ITEM_BANDAGE = BASE_ID + 5
-ITEM_1UP = BASE_ID + 6
-ITEM_WORLD6 = BASE_ID + 7
-ITEM_WORLD7 = BASE_ID + 8
-
-WORLD_ACCESS_ITEM_IDS = {
-    ITEM_WORLD2: 2, ITEM_WORLD3: 3, ITEM_WORLD4: 4,
-    ITEM_WORLD5: 5, ITEM_WORLD6: 6, ITEM_WORLD7: 7,
-}
-
-# Character items: item_id -> (bitmask_bit, name)
-# Bitmask lives at save_ptr + 0x3950
-CHARACTER_BITMASK_OFFSET = 0x3950
-CHARACTER_ITEMS = {
-    BASE_ID + 10: (2,  "4Color Meat Boy"),
-    BASE_ID + 11: (3,  "4Bit Meat Boy"),
-    BASE_ID + 31: (5,  "Brownie"),
-    BASE_ID + 32: (6,  "Bandage Girl"),
-    BASE_ID + 12: (7,  "Meat Ninja"),
-    BASE_ID + 13: (10, "Naija"),
-    BASE_ID + 14: (11, "Commander Video"),
-    BASE_ID + 15: (12, "Runman"),
-    BASE_ID + 16: (13, "Blob"),
-    BASE_ID + 17: (14, "Steve"),
-    BASE_ID + 18: (16, "Flywrench"),
-    BASE_ID + 19: (18, "Jill"),
-    BASE_ID + 20: (19, "Captain Viridian"),
-    BASE_ID + 21: (20, "Tofu Boy"),
-    BASE_ID + 22: (21, "Josef"),
-    BASE_ID + 23: (22, "The Kid"),
-    BASE_ID + 24: (23, "Headcrab"),
-    BASE_ID + 25: (24, "Ogmo"),
-    BASE_ID + 26: (25, "Potato Boy"),
-    BASE_ID + 27: (26, "MeatBoy and BandageGirl"),
-    BASE_ID + 28: (27, "Alien Hominid"),
-    BASE_ID + 29: (28, "Autorun MeatBoy"),
-    BASE_ID + 30: (29, "Tim"),
-}
-# Bit 0 = Meat Boy (always available)
+# Character base bits (Meat Boy always available)
 CHARACTER_BASE_BITS = (1 << 0)
 
-# Per-world Boss Token item IDs
-BOSS_TOKEN_IDS = {
-    BASE_ID + 33: 1,  # Forest Boss Token
-    BASE_ID + 34: 2,  # Hospital Boss Token
-    BASE_ID + 35: 3,  # Salt Factory Boss Token
-    BASE_ID + 36: 4,  # Hell Boss Token
-    BASE_ID + 37: 5,  # Rapture Boss Token
-    BASE_ID + 38: 6,  # The End Boss Token
+# Goal string constants (from APWorld options)
+GOAL_LARRIES = "larries"
+GOAL_LIGHT_WORLD = "light_world"
+GOAL_DARK_WORLD = "dark_world"
+GOAL_LW_CHAPTER7 = "light_world_chapter7"
+GOAL_DW_CHAPTER7 = "dark_world_chapter7"
+GOAL_BANDAGES = "bandages"
+
+# Goal int->string mapping (slot_data may send int or string)
+GOAL_INT_TO_STR = {
+    0: GOAL_LARRIES, 1: GOAL_LIGHT_WORLD, 2: GOAL_DARK_WORLD,
+    3: GOAL_LW_CHAPTER7, 4: GOAL_DW_CHAPTER7, 5: GOAL_BANDAGES,
 }
 
-BOSS_TOKEN_NAMES = {
-    1: "Forest Boss Token",
-    2: "Hospital Boss Token",
-    3: "Salt Factory Boss Token",
-    4: "Hell Boss Token",
-    5: "Rapture Boss Token",
-    6: "The End Boss Token",
+# Warp zone slot mapping: (world, zone_index) -> [(host_level_1based, is_dark)]
+# Zone 0,2 = retro warps (light), Zone 1 = character warp (light), Zone 3 = dark warp
+# Each zone has 3 sub-levels (slots zone*3, zone*3+1, zone*3+2)
+LW_WARP_ZONE_SLOTS = {}  # (world, host_level) -> [slot_indices]
+DW_WARP_ZONE_SLOTS = {}
+
+# Build warp slot index lookups from the warp name tables
+# Light warp zones: each has 3 sub-levels
+# The slot ordering within each world is determined by the zone index
+WARP_ZONE_MAP = {
+    # world -> [(zone_idx, host_level_1based, is_dark, warp_name)]
+    1: [(0, 5, False, "Sky Pup"), (1, 12, False, "The Commander!"),
+        (2, 19, False, "Hand Held Hack"), (3, 13, True, "Space Boy")],
+    2: [(0, 15, False, "The Blood Shed"), (1, 8, False, "The Bootlicker!"),
+        (2, 12, False, "Castle Crushers"), (3, 5, True, "1977")],
+    3: [(0, 7, False, "Tunnel Vision"), (1, 16, False, "The Jump Man"),
+        (2, 5, False, "Cartridge Dump"), (3, 8, True, "Kontra")],
+    4: [(0, 8, False, "Brimstone"), (1, 18, False, "The Fly Guy!"),
+        (2, 14, False, "The Key Master"), (3, 7, True, "MMMMMM")],
+    5: [(0, 1, False, "Skyscraper"), (1, 7, False, "The Guy!"),
+        (2, 12, False, "Sunshine Island"), (3, 20, True, "Meat is Death")],
 }
 
-# Progressive dark access items (per-world, received multiple times)
-DARK_ACCESS_IDS: Dict[int, int] = {
-    BASE_ID + 100: 1,
-    BASE_ID + 101: 2,
-    BASE_ID + 102: 3,
-    BASE_ID + 103: 4,
-    BASE_ID + 104: 5,
-}
-DARK_ACCESS_NAMES = {
-    1: "Forest Dark Access",
-    2: "Hospital Dark Access",
-    3: "Salt Factory Dark Access",
-    4: "Hell Dark Access",
-    5: "Rapture Dark Access",
-}
-DARK_LOCK_TIME_PENALTY = 1.0  # seconds above par to suppress dark unlock
+# Build lookup: (world, zone_idx) -> (host_level_1based, is_dark, warp_name)
+WARP_ZONE_INFO = {}
+for w, zones in WARP_ZONE_MAP.items():
+    for zone_idx, host_lv, is_dark, wname in zones:
+        WARP_ZONE_INFO[(w, zone_idx)] = (host_lv, is_dark, wname)
 
-# Boss completion counter offsets (from save_ptr)
-BOSS_COUNTER_OFFSETS = {
-    1: 0x38D8, 2: 0x38E4, 3: 0x38F0,
-    4: 0x38FC, 5: 0x3908, 6: 0x3914,
-}
-
-# Game's native thresholds (counter >= this opens boss door)
-BOSS_UNLOCK_THRESHOLDS = {
-    1: 17, 2: 17, 3: 17, 4: 17, 5: 17, 6: 5,
-}
-
-ITEM_NAMES = {
-    ITEM_WORLD2: "World 2 Access",
-    ITEM_WORLD3: "World 3 Access",
-    ITEM_WORLD4: "World 4 Access",
-    ITEM_WORLD5: "World 5 Access",
-    ITEM_WORLD6: "World 6 Access",
-    ITEM_WORLD7: "World 7 Access",
-    ITEM_BANDAGE: "Bandage",
-    ITEM_1UP: "1-Up",
-    **{iid: BOSS_TOKEN_NAMES[w] for iid, w in BOSS_TOKEN_IDS.items()},
-    **{iid: name for iid, (bit, name) in CHARACTER_ITEMS.items()},
-    **{iid: DARK_ACCESS_NAMES[w] for iid, w in DARK_ACCESS_IDS.items()},
-}
-
-# Warp zone milestone achievement location IDs
-WARP_MILESTONE_LOCS = {
-    1:  BASE_ID + 933,  # Nostalgia
-    5:  BASE_ID + 934,  # Living in the Past
-    10: BASE_ID + 935,  # Old School
-    20: BASE_ID + 936,  # Retro Rampage
-}
-WARP_MILESTONE_NAMES = {
-    1: "Nostalgia", 5: "Living in the Past",
-    10: "Old School", 20: "Retro Rampage",
-}
-
-# Per-world light A+ achievement location IDs
-WORLD_APLUS_LOCS = {
-    1: BASE_ID + 937,  # Rare
-    2: BASE_ID + 938,  # Medium Rare
-    3: BASE_ID + 939,  # Medium
-    4: BASE_ID + 940,  # Medium Well
-    5: BASE_ID + 941,  # Well Done
-}
-WORLD_APLUS_NAMES = {
-    1: "Rare", 2: "Medium Rare", 3: "Medium",
-    4: "Medium Well", 5: "Well Done",
-}
-
-
-# =============================================================================
-# BANDAGE DATA â€” using corrected SMBDatabase.cs data
-# =============================================================================
-
-BANDAGE_DATA = CORRECTED_BANDAGE_DATA
-BANDAGE_BY_ADDR = CORRECTED_BANDAGE_BY_ADDR
-
-# Bandage grant targets (ordered list for granting received bandages)
-# These are levels WITHOUT bandages â€” safe to set bit 0 on to increase count
-BANDAGE_GRANT_TARGETS = []
-for w in range(1, 6):
-    light_has = set(lv - 1 for lv in LIGHT_BANDAGE_LEVELS.get(w, []))
-    for li in range(20):
-        if li not in light_has:
-            BANDAGE_GRANT_TARGETS.append((w, li, "light"))
-for w in range(1, 6):
-    dark_has = set(lv - 1 for lv in DARK_BANDAGE_LEVELS.get(w, []))
-    for li in range(20):
-        if li not in dark_has:
-            BANDAGE_GRANT_TARGETS.append((w, li, "dark"))
-
-
-# HELPER FUNCTIONS
-
-def type_to_region(lvl_type):
-    if lvl_type == TYPE_LIGHT:
-        return "light"
-    elif lvl_type == TYPE_DARK:
-        return "dark"
-    elif TYPE_WARP_MIN <= lvl_type <= TYPE_WARP_MAX:
-        return "warp"
-    return None
-
-
-def is_warp(t):
-    return t is not None and TYPE_WARP_MIN <= t <= TYPE_WARP_MAX
+# Bandage slot addresses for warp zones
+# Each warp zone has 2 bandages (except character warps which have 0)
+# Bandages are on sub-levels 1 and 2 (slots zone*3+0 and zone*3+1)
+# Character warps (zone 1) and dark warps (zone 3) may or may not have bandages
+# From the APWorld data, only retro warps and dark warps have bandages
 
 
 def get_level_display_name(world, level, lvl_type):
+    """Human-readable level name for logging."""
     ln = level + 1
     region = type_to_region(lvl_type)
-    name = get_level_name(world, level, region) if region else None
-
     if is_warp(lvl_type):
-        wname = get_warp_zone_name(world, level) if level >= 0 else "?"
-        sub = (level % 3) + 1 if level >= 0 else "?"
-        return f"{wname} {sub}" if wname else f"{world}-? Warp Sub {ln}"
+        return f"W{world} Warp L{level}"
     if lvl_type == TYPE_DARK:
+        name = DARK_LEVEL_NAMES.get((world, ln), "")
         return f"{world}-{ln}X {name}" if name else f"{world}-{ln}X"
     if level == BOSS_LEVEL_INDEX:
         return f"Boss - {WORLD_NAMES.get(world, f'W{world}')}"
+    name = LIGHT_LEVEL_NAMES.get((world, ln), "")
     return f"{world}-{ln} {name}" if name else f"{world}-{ln}"
 
 
-# GAME INTERFACE
+
+# GAME INTERFACE 
+
 
 class GameInterface:
     """Handles all pymem interaction with SuperMeatBoy.exe"""
@@ -404,91 +294,65 @@ class GameInterface:
         user32.keybd_event(VK_ESCAPE, 0x01, KEYEVENTF_KEYUP, 0)
 
     def rb(self, a):
-        try:
-            return self.pm.read_uchar(self.base + a)
-        except:
-            return -1
+        try: return self.pm.read_uchar(self.base + a)
+        except: return -1
 
     def rp(self, b, o):
         try:
             p = self.pm.read_uint(self.base + b)
             return self.pm.read_uchar(p + o) if p else -1
-        except:
-            return -1
+        except: return -1
 
     def rpi(self, b, o):
         try:
             p = self.pm.read_uint(self.base + b)
             return self.pm.read_int(p + o) if p else -1
-        except:
-            return -1
+        except: return -1
 
     def get_sp(self):
-        try:
-            return self.pm.read_uint(self.base + ADDR["save_ptr"])
-        except:
-            return 0
+        try: return self.pm.read_uint(self.base + ADDR["save_ptr"])
+        except: return 0
 
     def read_comp(self, sp, world, index, region):
         ca = comp_addr(world, index, region)
-        if ca is None or sp == 0:
-            return -1
-        try:
-            return self.pm.read_uchar(sp + ca)
-        except:
-            return -1
+        if ca is None or sp == 0: return -1
+        try: return self.pm.read_uchar(sp + ca)
+        except: return -1
 
     def write_comp(self, sp, world, index, region, value):
         ca = comp_addr(world, index, region)
-        if ca is None or sp == 0:
-            return
-        try:
-            self.pm.write_uchar(sp + ca, value)
-        except:
-            pass
+        if ca is None or sp == 0: return
+        try: self.pm.write_uchar(sp + ca, value)
+        except: pass
 
     def read_time(self, sp, world, level_index, region):
-        """Read IL best time (float) from save slot."""
         ta = time_addr(world, level_index, region)
-        if ta is None or sp == 0:
-            return -1.0
-        try:
-            return self.pm.read_float(sp + ta)
-        except:
-            return -1.0
+        if ta is None or sp == 0: return -1.0
+        try: return self.pm.read_float(sp + ta)
+        except: return -1.0
 
     def write_time(self, sp, world, level_index, region, value):
-        """Write IL best time (float) to save slot."""
         ta = time_addr(world, level_index, region)
-        if ta is None or sp == 0:
-            return
-        try:
-            self.pm.write_float(sp + ta, value)
-        except:
-            pass
+        if ta is None or sp == 0: return
+        try: self.pm.write_float(sp + ta, value)
+        except: pass
 
     def read_warp_slots(self, sp, world):
-        """Read completion bytes for all 12 warp slots."""
-        wb = WORLD_BASES.get(world)
-        if wb is None or sp == 0:
-            return [-1] * NUM_WARP_SLOTS
+        warp_base = WARP_BASES.get(world)
+        if warp_base is None or sp == 0: return [-1] * NUM_WARP_SLOTS
         vals = []
         for i in range(NUM_WARP_SLOTS):
-            ca = wb + WARP_OFFSET + i * SLOT_SIZE + COMP_BYTE
-            try:
-                vals.append(self.pm.read_uchar(sp + ca))
-            except:
-                vals.append(-1)
+            ca = warp_base + i * SLOT_SIZE + COMP_BYTE
+            try: vals.append(self.pm.read_uchar(sp + ca))
+            except: vals.append(-1)
         return vals
 
     def read_warp_slots_full(self, sp, world):
-        """Read all 12 warp slot (comp, time) tuples."""
-        wb = WORLD_BASES.get(world)
-        if wb is None or sp == 0:
-            return [(-1, -1.0)] * NUM_WARP_SLOTS
+        warp_base = WARP_BASES.get(world)
+        if warp_base is None or sp == 0: return [(-1, -1.0)] * NUM_WARP_SLOTS
         result = []
         for i in range(NUM_WARP_SLOTS):
-            base_off = wb + WARP_OFFSET + i * SLOT_SIZE
+            base_off = warp_base + i * SLOT_SIZE
             try:
                 comp = self.pm.read_uchar(sp + base_off + COMP_BYTE)
                 tval = self.pm.read_float(sp + base_off + TIME_BYTE)
@@ -498,48 +362,39 @@ class GameInterface:
         return result
 
     def set_world_unlock(self, sp, bitmask):
-        try:
-            self.pm.write_uchar(sp + ADDR["world_unlock"], bitmask)
-        except:
-            pass
+        try: self.pm.write_uchar(sp + ADDR["world_unlock"], bitmask)
+        except: pass
 
     def get_world_unlock(self, sp):
-        try:
-            return self.pm.read_uchar(sp + ADDR["world_unlock"])
-        except:
-            return 0
+        try: return self.pm.read_uchar(sp + ADDR["world_unlock"])
+        except: return 0
 
     def get_char_bitmask(self, sp):
-        try:
-            return self.pm.read_uint(sp + CHARACTER_BITMASK_OFFSET)
-        except:
-            return 0
+        try: return self.pm.read_uint(sp + CHARACTER_BITMASK_OFFSET)
+        except: return 0
 
     def set_char_bitmask(self, sp, bitmask):
-        try:
-            self.pm.write_uint(sp + CHARACTER_BITMASK_OFFSET, bitmask)
-        except:
-            pass
+        try: self.pm.write_uint(sp + CHARACTER_BITMASK_OFFSET, bitmask)
+        except: pass
 
     def read_boss_counter(self, sp, world):
-        """Read the boss completion counter for a world."""
         offset = BOSS_COUNTER_OFFSETS.get(world)
-        if offset is None or sp == 0:
-            return -1
-        try:
-            return self.pm.read_uchar(sp + offset)
-        except:
-            return -1
+        if offset is None or sp == 0: return -1
+        try: return self.pm.read_uchar(sp + offset)
+        except: return -1
 
     def write_boss_counter(self, sp, world, value):
-        """Write the boss completion counter for a world."""
         offset = BOSS_COUNTER_OFFSETS.get(world)
-        if offset is None or sp == 0:
-            return
-        try:
-            self.pm.write_uchar(sp + offset, min(value, 255))
-        except:
-            pass
+        if offset is None or sp == 0: return
+        try: self.pm.write_uchar(sp + offset, min(value, 255))
+        except: pass
+
+    def read_boss_comp(self, sp, world):
+        """Read boss completion byte (at BOSS_COUNTER_OFFSETS[w] + COMP_BYTE)."""
+        offset = BOSS_COUNTER_OFFSETS.get(world)
+        if offset is None or sp == 0: return -1
+        try: return self.pm.read_uchar(sp + offset + COMP_BYTE)
+        except: return -1
 
     def get_state(self):
         try:
@@ -555,67 +410,938 @@ class GameInterface:
         except:
             return None
 
+    def read_death_count(self, sp):
+        """Read total death counter from save data."""
+        if sp == 0:
+            return -1
+        try:
+            return self.pm.read_int(sp + DEATH_COUNT_OFFSET)
+        except:
+            return -1
 
-# AP NETWORK CLIENT
+
+
+# AP CLIENT - Rewritten for zuils APWorld
+
 
 class APClient:
-    """Core Archipelago client logic with game memory integration."""
+    """Archipelago client logic for zuils' Super Meat Boy APWorld."""
 
     def __init__(self, log_callback, status_callback):
         self.log = log_callback
         self.set_status = status_callback
 
+        # Connection
         self.server: str = ""
         self.slot: str = ""
         self.password: str = ""
-
         self.ws = None
         self.connected: bool = False
-        self.slot_info: Dict = {}
         self.slot_data: Dict = {}
         self.team: int = 0
         self.players: Dict[int, str] = {}
 
+        # AP state
         self.locations_checked: Set[int] = set()
         self.items_received: List[Dict] = []
         self.items_processed: int = 0
 
-        # ID to name mappings from DataPackage
-        self.all_items: Dict[int, str] = {}
-        self.all_locations: Dict[int, str] = {}
+        # DataPackage: name <-> id mappings
+        self.loc_name_to_id: Dict[str, int] = {}
+        self.item_id_to_name: Dict[int, str] = {}
+        self.loc_id_to_name: Dict[int, str] = {}
 
-        # Game state
-        self.allowed_worlds: Set[int] = {1}
+        # Game state tracking
+        self.allowed_worlds: Set[int] = set()
+        self.character_bits: int = CHARACTER_BASE_BITS
         self.bandage_count: int = 0
-        self.character_bits: int = CHARACTER_BASE_BITS  # Start with Meat Boy + menu
-        self.goal_completed: bool = False
-        self.aplus_logged: Set[int] = set()  # Track A+ grades we've already logged
+        self.boss_key_counts: Dict[int, int] = {w: 0 for w in range(1, 7)}
+        self.boss_unlocked: Set[int] = set()
         self.boss_token_count: int = 0
-        self.boss_token_counts: Dict[int, int] = {w: 0 for w in range(1, 7)}
-        self.boss_unlocked: Set[int] = set()  # Worlds with boss unlocked via tokens
-        self.dark_lock_enabled: bool = False
-        self.dark_unlocks_per_world: int = 4
-        self.dark_access_counts: Dict[int, int] = {w: 0 for w in range(1, 6)}
-        self.real_best_times: Dict = {}  # (world, level_index) -> actual time
-        self.fake_aplus_times: Set[Tuple[int, int]] = set()  # (world, level_index) with grant-only sub-par times
+        self.dw_fetus_key_count: int = 0
+        self.ch7_lw_key_count: int = 0
+        self.ch7_dw_key_count: int = 0
+        self.victory_received: bool = False
+        self.goal_completed: bool = False
+
+        # A+ Rank items received: set of (world, level_1based)
+        self.aplus_items_received: Set[Tuple[int, int]] = set()
+        # All received item IDs (for has_meat_boy / has_bandage_girl checks)
+        self._received_item_ids: Set[int] = set()
+        # Real best times preserved before suppression
+        self.real_best_times: Dict[Tuple[int, int], float] = {}
+        # Levels with fake sub-par times from A+ item grants
+        self.fake_aplus_times: Set[Tuple[int, int]] = set()
+        self._pending_aplus_recheck: Set[Tuple[int, int, str]] = set()  # (world, level_0based, region)
 
         self._running = False
         self.loop = None
 
-    def get_item_name(self, item_id: int) -> str:
-        if item_id in self.all_items:
-            return self.all_items[item_id]
-        if item_id in ITEM_NAMES:
-            return ITEM_NAMES[item_id]
-        return f"Unknown Item {item_id}"
+    
+    # NAME/ID RESOLUTION (DataPackage-based)
+    
 
-    def get_location_name_by_id(self, loc_id: int) -> str:
-        if loc_id in self.all_locations:
-            return self.all_locations[loc_id]
-        return get_location_name(loc_id)
+    def loc_id(self, name: str) -> Optional[int]:
+        """Resolve location name to ID via DataPackage."""
+        return self.loc_name_to_id.get(name)
+
+    def get_item_name(self, item_id: int) -> str:
+        return self.item_id_to_name.get(item_id, f"Unknown({item_id})")
+
+    def get_location_name(self, loc_id: int) -> str:
+        return self.loc_id_to_name.get(loc_id, f"Unknown({loc_id})")
 
     def get_player_name(self, player_id: int) -> str:
         return self.players.get(player_id, f"Player {player_id}")
+
+    
+    # SLOT DATA PARSING
+    
+
+    def _parse_goal(self, raw) -> str:
+        """Parse goal from slot_data (may be int or string)."""
+        if isinstance(raw, int):
+            return GOAL_INT_TO_STR.get(raw, GOAL_LARRIES)
+        if isinstance(raw, str):
+            return raw
+        return GOAL_LARRIES
+
+    
+    # WORLD ACCESS
+    
+
+    def _compute_world_bitmask(self):
+        """Compute world unlock bitmask respecting character requirements.
+
+        APWorld rules:
+        - W6 requires Chapter 6 Key AND Meat Boy
+        - W7 requires Chapter 7 Key AND Bandage Girl
+        - W7 with ch7 goal requires ALL 7 chapter keys AND Bandage Girl
+        """
+        bitmask = 0
+        goal = self._parse_goal(self.slot_data.get("goal", 0))
+        for w in self.allowed_worlds:
+            if w == 6:
+                if not self._has_meat_boy():
+                    continue
+            elif w == 7:
+                if not self._has_bandage_girl():
+                    continue
+                if goal in (GOAL_LW_CHAPTER7, GOAL_DW_CHAPTER7):
+                    if not all(cw in self.allowed_worlds for cw in range(1, 8)):
+                        continue
+            bitmask |= (1 << (w - 1))
+        return bitmask
+
+    
+    # BOSS GATING (matches APWorld rules.py exactly)
+    
+    # APWorld access functions:
+    #   boss_req(chpt): Chapter {chpt} Boss Key × boss_req AND Meat Boy
+    #   larries(): boss_req(5) AND (¬tokens OR goal≠"larries" OR Token×4)
+    #   lw_drfetus(): Ch5 Boss Key × lw_dr_fetus_req AND (¬tokens OR goal≠"light_world" OR Token×5)
+    #   dw_drfetus(): DW Dr. Fetus Key × dw_dr_fetus_req AND (¬tokens OR goal≠"dark_world" OR Token×6)
+    #
+    # The game has ONE boss counter per world. W6 counter gates both LW and DW boss.
+
+
+    PROG_CHARACTER_ITEMS = None  
+
+    def _has_meat_boy(self):
+        return ITEM_MEAT_BOY in self._received_item_ids
+
+    def _has_bandage_girl(self):
+        return ITEM_BANDAGE_GIRL in self._received_item_ids
+
+    def _has_prog_character(self):
+        """Check if any ProgCharacters item has been received."""
+        if self.PROG_CHARACTER_ITEMS is None:
+            from smb_apworld_data import (ITEM_COMMANDER_VIDEO, ITEM_JILL, ITEM_OGMO,
+                                           ITEM_FLYWRENCH, ITEM_THE_KID, ITEM_JOSEF,
+                                           ITEM_NAIJA, ITEM_STEVE)
+            APClient.PROG_CHARACTER_ITEMS = {
+                ITEM_COMMANDER_VIDEO, ITEM_JILL, ITEM_OGMO, ITEM_FLYWRENCH,
+                ITEM_THE_KID, ITEM_JOSEF, ITEM_NAIJA, ITEM_STEVE,
+            }
+        return bool(self._received_item_ids & self.PROG_CHARACTER_ITEMS)
+
+    def _boss_req_met(self, world, boss_req_val):
+        """Check boss_req(chpt): Chapter {chpt} Boss Key × boss_req AND Meat Boy."""
+        if not self._has_meat_boy():
+            return False
+        return self.boss_key_counts.get(world, 0) >= boss_req_val
+
+    def _larries_accessible(self, boss_req_val):
+        """Check larries(): boss_req(5) AND token gating for larries goal."""
+        if not self._boss_req_met(5, boss_req_val):
+            return False
+        goal = self._parse_goal(self.slot_data.get("goal", 0))
+        tokens_enabled = bool(self.slot_data.get("boss_tokens", 0))
+        if tokens_enabled and goal == GOAL_LARRIES:
+            return self.boss_token_count >= 4
+        return True
+
+    def _lw_drfetus_accessible(self):
+        """Check lw_drfetus(): Ch5 Boss Key × lw_dr_fetus_req + token gating."""
+        lw_req = self.slot_data.get("lw_dr_fetus_req", 5)
+        if self.boss_key_counts.get(5, 0) < lw_req:
+            return False
+        goal = self._parse_goal(self.slot_data.get("goal", 0))
+        tokens_enabled = bool(self.slot_data.get("boss_tokens", 0))
+        if tokens_enabled and goal == GOAL_LIGHT_WORLD:
+            return self.boss_token_count >= 5
+        return True
+
+    def _dw_drfetus_accessible(self):
+        """Check dw_drfetus(): DW Dr. Fetus Key × dw_dr_fetus_req + token gating."""
+        dw_req = self.slot_data.get("dw_dr_fetus_req", 85)
+        if self.dw_fetus_key_count < dw_req:
+            return False
+        goal = self._parse_goal(self.slot_data.get("goal", 0))
+        tokens_enabled = bool(self.slot_data.get("boss_tokens", 0))
+        if tokens_enabled and goal == GOAL_DARK_WORLD:
+            return self.boss_token_count >= 6
+        return True
+
+    def _w6_boss_should_unlock(self):
+        """W6 boss counter should be unlocked if EITHER LW or DW Dr. Fetus is accessible."""
+        return self._lw_drfetus_accessible() or self._dw_drfetus_accessible()
+
+    def _can_send_boss_check(self, world, is_dark, boss_req_val):
+        """Check if we should send a boss defeat check based on APWorld access rules.
+
+        This gates CHECK SENDING, not physical access (which is counter-based).
+        """
+        if world <= 4:
+            return self._boss_req_met(world, boss_req_val)
+        elif world == 5:
+            if is_dark:
+                return False  # W5 has no dark boss
+            return self._larries_accessible(boss_req_val)
+        elif world == 6:
+            if is_dark:
+                return self._dw_drfetus_accessible()
+            return self._lw_drfetus_accessible()
+        return True
+
+    def _can_send_cutscene_check(self, world, boss_req_val):
+        """Check if cutscene check can be sent. Cutscenes use boss_req or lw_drfetus."""
+        if world <= 5:
+            return self._boss_req_met(world, boss_req_val)
+        elif world == 6:
+            return self._lw_drfetus_accessible()
+        return True
+
+    def _update_boss_unlocks(self, game, sp, boss_req_val):
+        """Check all bosses and unlock any newly accessible ones."""
+        newly = []
+        for w in range(1, 7):
+            if w in self.boss_unlocked:
+                continue
+            should_unlock = False
+            if w <= 4:
+                should_unlock = self._boss_req_met(w, boss_req_val)
+            elif w == 5:
+                should_unlock = self._larries_accessible(boss_req_val)
+            elif w == 6:
+                should_unlock = self._w6_boss_should_unlock()
+            if should_unlock:
+                self.boss_unlocked.add(w)
+                threshold = BOSS_UNLOCK_THRESHOLDS.get(w, 17)
+                game.write_boss_counter(sp, w, threshold)
+                newly.append(w)
+        return newly
+
+    def _enforce_boss_counters(self, game, sp, boss_req_val):
+        """Keep boss counters in sync with AP boss key state.
+
+        Unlocked bosses: counter stays at/above threshold.
+        Locked bosses: counter shows boss key progress (below threshold).
+        """
+        for w in range(1, 7):
+            should_be_unlocked = False
+            if w <= 4:
+                should_be_unlocked = self._boss_req_met(w, boss_req_val)
+            elif w == 5:
+                should_be_unlocked = self._larries_accessible(boss_req_val)
+            elif w == 6:
+                should_be_unlocked = self._w6_boss_should_unlock()
+
+            threshold = BOSS_UNLOCK_THRESHOLDS.get(w)
+            if should_be_unlocked:
+                self.boss_unlocked.add(w)
+                if threshold:
+                    current = game.read_boss_counter(sp, w)
+                    if 0 <= current < threshold:
+                        game.write_boss_counter(sp, w, threshold)
+            else:
+                self.boss_unlocked.discard(w)
+                # Show boss key progress instead of 0
+                if w <= 5:
+                    progress = min(self.boss_key_counts.get(w, 0),
+                                   threshold - 1 if threshold else 0)
+                elif w == 6:
+                    # W6 threshold is 5; show progress toward LW or DW req
+                    lw_req = max(self.slot_data.get("lw_dr_fetus_req", 5), 1)
+                    dw_req = max(self.slot_data.get("dw_dr_fetus_req", 85), 1)
+                    lw_keys = self.boss_key_counts.get(5, 0)
+                    lw_progress = min(4, int(lw_keys * 5 / lw_req))
+                    dw_progress = min(4, int(self.dw_fetus_key_count * 5 / dw_req))
+                    progress = max(lw_progress, dw_progress)
+                else:
+                    progress = 0
+                current = game.read_boss_counter(sp, w)
+                if current != progress:
+                    game.write_boss_counter(sp, w, progress)
+
+    
+    # A+ RANK / DARK WORLD GATING
+    
+
+    def _dark_level_unlocked(self, world, level_1based):
+        """Check if a dark level is unlocked via received A+ Rank item."""
+        if not self.slot_data.get("dark_world", 0):
+            return False
+        return (world, level_1based) in self.aplus_items_received
+
+    def _enforce_dark_locks(self, game, sp):
+        """Suppress A+ times on light levels whose dark counterpart is locked.
+        Write par+1s to keep dark locked until AP sends the A+ Rank item.
+        """
+        if not self.slot_data.get("dark_world", 0):
+            return
+        for w in range(1, 8):
+            num = NUM_LEVELS.get(w, 20)
+            for li in range(num):
+                lv1 = li + 1
+                if self._dark_level_unlocked(w, lv1):
+                    # Restore real time if we suppressed it
+                    real = self.real_best_times.get((w, li))
+                    par = get_par_time(w, li, "light")
+                    if real is not None and par is not None and real <= par:
+                        current = game.read_time(sp, w, li, "light")
+                        if current > par:
+                            game.write_time(sp, w, li, "light", real)
+                    # Clear fake flag if player replayed with real time
+                    if (w, li) in self.fake_aplus_times and par is not None:
+                        current = game.read_time(sp, w, li, "light")
+                        fake_val = par - 0.001
+                        if abs(current - fake_val) > 0.0005:
+                            self.fake_aplus_times.discard((w, li))
+                    continue
+                # Not unlocked - suppress if A+ time exists
+                par = get_par_time(w, li, "light")
+                if par is None:
+                    continue
+                t = game.read_time(sp, w, li, "light")
+                if t > 0 and t <= par:
+                    self.real_best_times[(w, li)] = t
+                    game.write_time(sp, w, li, "light", par + 1.0)
+
+    def _grant_aplus_item(self, game, sp, world, level_1based):
+        """Apply an A+ Rank item - make the dark level appear."""
+        li = level_1based - 1
+        par = get_par_time(world, li, "light")
+        if par is None:
+            return
+        real = self.real_best_times.get((world, li))
+        if real is not None and real > 0 and real <= par:
+            game.write_time(sp, world, li, "light", real)
+            self.fake_aplus_times.discard((world, li))
+        else:
+            # Write fake sub-par time to unlock dark level visually
+            comp = game.read_comp(sp, world, li, "light")
+            if comp >= 0 and (comp & FLAG_COMPLETE):
+                current_t = game.read_time(sp, world, li, "light")
+                if current_t > par:
+                    game.write_time(sp, world, li, "light", par - 0.001)
+                    self.fake_aplus_times.add((world, li))
+
+    
+    # LOCATION CHECKING HELPERS
+    
+
+    async def _check_location_by_name(self, name: str, checks_list: list):
+        """Add location to checks list if it exists and hasn't been checked."""
+        loc = self.loc_id(name)
+        if loc is not None and loc not in self.locations_checked:
+            checks_list.append(loc)
+            return True
+        return False
+
+    async def send_location_checks(self, locations: List[int]):
+        if not self.connected or not locations:
+            return
+        new_locs = [loc for loc in locations if loc not in self.locations_checked]
+        if not new_locs:
+            return
+        self.locations_checked.update(new_locs)
+        await self.send_message({"cmd": "LocationChecks", "locations": new_locs})
+        for loc in new_locs:
+            self.log(f"Checked: {self.get_location_name(loc)}", "location")
+
+    async def send_goal_complete(self):
+        if not self.goal_completed:
+            self.goal_completed = True
+            await self.send_message({"cmd": "StatusUpdate", "status": 30})
+            self.log("GOAL COMPLETE!", "success")
+
+    
+    # A+ DETECTION
+    
+
+    def _check_aplus_location(self, game, sp, world, level_0based, region, checks):
+        """Check if level qualifies for A+ and add location check."""
+        comp = game.read_comp(sp, world, level_0based, region)
+        if comp < 0 or not (comp & FLAG_COMPLETE):
+            return
+        time_val = game.read_time(sp, world, level_0based, region)
+        par = get_par_time(world, level_0based, region)
+        if par is None:
+            return
+        if time_val <= 0:
+            # Time not yet flushed to save — add to pending recheck
+            self._pending_aplus_recheck.add((world, level_0based, region))
+            return
+        # Use real time if dark lock suppressed it
+        if region == "light" and time_val > par:
+            real = self.real_best_times.get((world, level_0based))
+            if real is not None and real > 0 and real <= par:
+                time_val = real
+        # Skip fake sub-par times from A+ item grants — but if the player
+        # replayed and got a REAL A+, the game overwrites the fake value.
+        # Detect this by comparing against the known fake value (par - 0.001).
+        if (world, level_0based) in self.fake_aplus_times and region == "light":
+            fake_val = par - 0.001
+            if abs(time_val - fake_val) < 0.0005:
+                # Time is still the fake value we wrote — skip
+                self._pending_aplus_recheck.discard((world, level_0based, region))
+                return
+            else:
+                # Player replayed and got a real time — clear the fake flag
+                self.fake_aplus_times.discard((world, level_0based))
+        if time_val > par:
+            # Time is written but player didn't get A+ — remove from pending
+            self._pending_aplus_recheck.discard((world, level_0based, region))
+            return
+        lv1 = level_0based + 1
+        if region == "light":
+            name = light_aplus_name(world, lv1)
+        else:
+            name = dark_aplus_name(world, lv1)
+        if name:
+            loc = self.loc_id(name)
+            if loc and loc not in self.locations_checked:
+                checks.append(loc)
+                self.log(f"A+ {name} ({time_val:.3f}s <= {par:.3f}s)", "location")
+                # Clear from pending if it was there
+                self._pending_aplus_recheck.discard((world, level_0based, region))
+
+    
+    # BANDAGE DETECTION
+    
+
+    def _check_bandage(self, game, sp, world, level_0based, region, entry_val, current_val, checks):
+        """Check if bandage bit was newly set, revoke it, send check."""
+        if entry_val < 0 or current_val < 0:
+            return
+        if not (entry_val & FLAG_BANDAGE) and (current_val & FLAG_BANDAGE):
+            lv1 = level_0based + 1
+            if region == "light":
+                bname = light_bandage_name(world, lv1)
+            elif region == "dark":
+                bname = dark_bandage_name(world, lv1)
+            else:
+                bname = None  # Warp bandages handled separately
+            if bname:
+                loc = self.loc_id(bname)
+                if loc and loc not in self.locations_checked:
+                    checks.append(loc)
+                    self.log(f"Bandage: {bname}", "location")
+            # Always revoke bandage bit
+            game.write_comp(sp, world, level_0based, region,
+                            current_val & MASK_CLEAR_BANDAGE)
+
+    def _check_warp_bandages(self, game, sp, world, entry_slots, current_slots, checks):
+        """Check warp zone bandages by diffing slot snapshots."""
+        # Track loc IDs queued in THIS pass so we don't double-send
+        queued_this_pass = set()
+        for si in range(NUM_WARP_SLOTS):
+            ev = entry_slots[si]
+            cv = current_slots[si]
+            if ev < 0 or cv < 0 or ev == cv:
+                continue
+            if not (ev & FLAG_BANDAGE) and (cv & FLAG_BANDAGE):
+                zone_idx = si // 3
+                info = WARP_ZONE_INFO.get((world, zone_idx))
+                if info:
+                    host_lv, is_dark, wname = info
+                    name_fn = dw_warp_bandage_name if is_dark else lw_warp_bandage_name
+                    sent = False
+                    for try_num in (1, 2):
+                        bname = name_fn(world, host_lv, try_num)
+                        if bname:
+                            loc = self.loc_id(bname)
+                            if loc and loc not in self.locations_checked and loc not in queued_this_pass:
+                                checks.append(loc)
+                                queued_this_pass.add(loc)
+                                self.log(f"Bandage: {bname}", "location")
+                                sent = True
+                                break
+                # Revoke
+                game.write_comp(sp, world, si, "warp", cv & MASK_CLEAR_BANDAGE)
+
+    
+    # WARP ZONE COMPLETION
+    
+
+    def _check_warp_completions(self, game, sp, world, checks, warps_completed):
+        """Check if any warp zone (3 sub-levels all complete) is newly done."""
+        if world > 5:
+            return
+        for zone_idx in range(4):
+            if (world, zone_idx) in warps_completed:
+                continue
+            all_done = True
+            for sub in range(3):
+                si = zone_idx * 3 + sub
+                comp = game.read_comp(sp, world, si, "warp")
+                if comp < 0 or not (comp & FLAG_COMPLETE):
+                    all_done = False
+                    break
+            if all_done:
+                warps_completed.add((world, zone_idx))
+                info = WARP_ZONE_INFO.get((world, zone_idx))
+                if info:
+                    host_lv, is_dark, wname = info
+                    if is_dark:
+                        loc_name = dw_warp_completion_name(world, host_lv)
+                    else:
+                        loc_name = lw_warp_completion_name(world, host_lv)
+                    if loc_name:
+                        loc = self.loc_id(loc_name)
+                        if loc and loc not in self.locations_checked:
+                            checks.append(loc)
+                            self.log(f"Warp Complete: {loc_name}", "location")
+
+    
+    # ACHIEVEMENT DETECTION
+    
+
+    def _check_achievements(self, game, sp, checks,
+                            achievements_enabled, dark_enabled,
+                            worlds_cleared, worlds_dark_cleared,
+                            milestones_sent, warp_milestones_sent,
+                            warps_completed,
+                            speedrun_sent, speedrun_enabled,
+                            deathless_sent, deathless_enabled):
+        """Check for all achievement-type locations."""
+        if not achievements_enabled:
+            return
+
+        # World clear achievements (W6/W7 only — W1-W5 don't have clear achievements)
+        for (w, region), ach_name in WORLD_CLEAR_NAMES.items():
+            tracking = worlds_cleared if region == "light" else worlds_dark_cleared
+            if w in tracking:
+                continue
+            if region == "dark" and not dark_enabled:
+                continue
+            num = NUM_LEVELS.get(w, 20)
+            all_done = True
+            for li in range(num):
+                comp = game.read_comp(sp, w, li, region)
+                if comp < 0 or not (comp & FLAG_COMPLETE):
+                    all_done = False
+                    break
+            if all_done:
+                tracking.add(w)
+                loc = self.loc_id(ach_name)
+                if loc and loc not in self.locations_checked:
+                    checks.append(loc)
+                    self.log(f"Achievement: {ach_name}", "success")
+
+        # Warp zone milestones
+        # Count total completed warp zones from save data
+        total_warps_done = 0
+        for w in range(1, 6):
+            for zone_idx in range(4):
+                zone_done = True
+                for sub in range(3):
+                    si = zone_idx * 3 + sub
+                    comp = game.read_comp(sp, w, si, "warp")
+                    if comp < 0 or not (comp & FLAG_COMPLETE):
+                        zone_done = False
+                        break
+                if zone_done:
+                    total_warps_done += 1
+
+        for threshold, ach_name in WARP_MILESTONE_NAMES.items():
+            if threshold in warp_milestones_sent:
+                continue
+            # Old School (10) and Retro Rampage (20) require dark world
+            if threshold >= 10 and not dark_enabled:
+                continue
+            if total_warps_done >= threshold:
+                warp_milestones_sent.add(threshold)
+                loc = self.loc_id(ach_name)
+                if loc and loc not in self.locations_checked:
+                    checks.append(loc)
+                    self.log(f"Achievement: {ach_name}", "success")
+
+        # Bandage milestones
+        for threshold, ach_name in BANDAGE_MILESTONE_NAMES.items():
+            if threshold in milestones_sent:
+                continue
+            # 70/90/100 require dark world
+            if threshold >= 70 and not dark_enabled:
+                continue
+            if self.bandage_count >= threshold:
+                milestones_sent.add(threshold)
+                loc = self.loc_id(ach_name)
+                if loc and loc not in self.locations_checked:
+                    checks.append(loc)
+                    self.log(f"Achievement: {ach_name}", "success")
+
+        # Speedrun achievements (sum of light+dark IL times per world)
+        if speedrun_enabled and dark_enabled:
+            for w, (threshold, ach_name) in SPEEDRUN_ACHIEVEMENTS.items():
+                if w in speedrun_sent:
+                    continue
+                # Check: all 20 light + 20 dark levels complete with A+
+                all_aplus = True
+                total_time = 0.0
+                for region in ("light", "dark"):
+                    for li in range(20):
+                        comp = game.read_comp(sp, w, li, region)
+                        if comp < 0 or not (comp & FLAG_COMPLETE):
+                            all_aplus = False
+                            break
+                        t = game.read_time(sp, w, li, region)
+                        if t <= 0:
+                            all_aplus = False
+                            break
+                        par = get_par_time(w, li, region)
+                        if par is None or t > par:
+                            all_aplus = False
+                            break
+                        total_time += t
+                    if not all_aplus:
+                        break
+                if all_aplus and total_time <= threshold:
+                    speedrun_sent.add(w)
+                    loc = self.loc_id(ach_name)
+                    if loc and loc not in self.locations_checked:
+                        checks.append(loc)
+                        self.log(f"Speedrun: {ach_name} ({total_time:.1f}s)", "success")
+
+        # Deathless achievements checked separately via _check_deathless
+
+    def _check_deathless(self, game, sp, checks,
+                          deathless_enabled, dark_enabled, deathless_sent,
+                          deathless_tracker):
+        """Check deathless achievements based on tracked deathless runs.
+
+        deathless_tracker: dict of (world, region) -> {
+            'levels_done': set of level_0based completed without dying,
+            'death_count_at_start': int,
+            'active': bool
+        }
+        """
+        if not deathless_enabled:
+            return
+
+        for (w, region), ach_name in DEATHLESS_ACHIEVEMENTS.items():
+            if (w, region) in deathless_sent:
+                continue
+            if region == "dark" and not dark_enabled:
+                continue
+            tracker = deathless_tracker.get((w, region))
+            if not tracker or not tracker.get('active'):
+                continue
+            num = NUM_LEVELS.get(w, 20)
+            if len(tracker['levels_done']) >= num:
+                # All levels completed without dying!
+                deathless_sent.add((w, region))
+                loc = self.loc_id(ach_name)
+                if loc and loc not in self.locations_checked:
+                    checks.append(loc)
+                    self.log(f"DEATHLESS: {ach_name}!", "success")
+
+    def _check_goal(self, goal, boss_tokens_enabled):
+        """Check if goal conditions are met. Returns True if goal complete.
+
+        APWorld completion conditions:
+        - larries/light_world/dark_world: state.has("Victory")
+        - bandages: Bandage count >= bandages_amount (+ Boss Tokens if enabled)
+        - ch7 goals: Key count >= 20 (+ Boss Tokens if enabled)
+        """
+        if self.goal_completed:
+            return False
+
+        if goal in (GOAL_LARRIES, GOAL_LIGHT_WORLD, GOAL_DARK_WORLD):
+            return self.victory_received
+
+        elif goal == GOAL_LW_CHAPTER7:
+            if self.ch7_lw_key_count < 20:
+                return False
+            return self._boss_tokens_sufficient(goal, boss_tokens_enabled)
+
+        elif goal == GOAL_DW_CHAPTER7:
+            if self.ch7_dw_key_count < 20:
+                return False
+            return self._boss_tokens_sufficient(goal, boss_tokens_enabled)
+
+        elif goal == GOAL_BANDAGES:
+            bandages_needed = self.slot_data.get("bandages_amount", 100)
+            if self.bandage_count < bandages_needed:
+                return False
+            return self._boss_tokens_sufficient(goal, boss_tokens_enabled)
+
+        return False
+
+    def _boss_tokens_sufficient(self, goal, boss_tokens_enabled):
+        """Check if enough Boss Tokens for the goal.
+
+        Replicates APWorld rules.py boss_tokens_amount calculation:
+        - Base: 4 (for first 4 bosses: W1-W4)
+        - +1 for Larries if "6" in hard_chapter_levels
+        - +1 for LW Dr. Fetus if goal==dark_world, or ("6" in hard AND goal!=light_world)
+        - +1 for DW Dr. Fetus if dark_world AND "6" in hard AND goal in (ch7s, bandages)
+        """
+        if not boss_tokens_enabled:
+            return True
+
+        hard_chapters = self.slot_data.get("hard_chapter_levels", set())
+        if isinstance(hard_chapters, list):
+            hard_chapters = set(str(x) for x in hard_chapters)
+        elif not isinstance(hard_chapters, set):
+            hard_chapters = set()
+        dw = bool(self.slot_data.get("dark_world", 0))
+
+        needed = 4  # First 4 bosses (W1-W4)
+
+        # Larries (W5 boss)
+        if "6" in hard_chapters:
+            needed += 1
+
+        # LW Dr. Fetus
+        if goal == GOAL_DARK_WORLD or ("6" in hard_chapters and goal != GOAL_LIGHT_WORLD):
+            needed += 1
+
+        # DW Dr. Fetus
+        if dw and "6" in hard_chapters and goal in (GOAL_LW_CHAPTER7, GOAL_DW_CHAPTER7, GOAL_BANDAGES):
+            needed += 1
+
+        return self.boss_token_count >= needed
+
+    
+    # SWEEP (catch missed completions/A+ on level select)
+    
+
+    def _sweep_world(self, game, sp, world, dark_enabled,
+                     warps_completed=None):
+        """Sweep a world for missed completion, A+, and warp checks."""
+        checks = []
+        num = NUM_LEVELS.get(world, 20)
+
+        for region in ("light", "dark"):
+            if region == "dark" and not dark_enabled:
+                continue
+            for li in range(num):
+                comp = game.read_comp(sp, world, li, region)
+                if comp < 0 or not (comp & FLAG_COMPLETE):
+                    continue
+                lv1 = li + 1
+                # Completion check
+                if region == "light":
+                    cname = light_completion_name(world, lv1)
+                else:
+                    cname = dark_completion_name(world, lv1)
+                if cname:
+                    loc = self.loc_id(cname)
+                    if loc and loc not in self.locations_checked:
+                        checks.append(loc)
+                # A+ check
+                self._check_aplus_location(game, sp, world, li, region, checks)
+
+        # Warp zone completion check
+        if warps_completed is not None and world <= 5:
+            self._check_warp_completions(game, sp, world, checks, warps_completed)
+
+        return checks
+
+    
+    # INITIAL SYNC SCAN
+    
+
+    async def _initial_sync_scan(self, game, sp, dark_enabled,
+                                  warps_completed,
+                                  achievements_enabled, speedrun_enabled, deathless_enabled,
+                                  worlds_cleared, worlds_dark_cleared,
+                                  milestones_sent, warp_milestones_sent,
+                                  speedrun_sent, deathless_sent):
+        """Scan save data for pre-existing progress on connect."""
+        self.log("Scanning save data for pre-existing progress...", "info")
+        precheck = []
+
+        # Level completions
+        comp_count = 0
+        for w in range(1, 8):
+            num = NUM_LEVELS.get(w, 20)
+            for region in ("light", "dark"):
+                if region == "dark" and not dark_enabled:
+                    continue
+                for li in range(num):
+                    comp = game.read_comp(sp, w, li, region)
+                    if comp >= 0 and (comp & FLAG_COMPLETE):
+                        lv1 = li + 1
+                        if region == "light":
+                            cname = light_completion_name(w, lv1)
+                        else:
+                            cname = dark_completion_name(w, lv1)
+                        if cname:
+                            loc = self.loc_id(cname)
+                            if loc and loc not in self.locations_checked:
+                                precheck.append(loc)
+                                comp_count += 1
+        if comp_count:
+            self.log(f"  Pre-existing completions: {comp_count}", "info")
+
+        # Bandages
+        bandage_count = 0
+        bandages_enabled = self.slot_data.get("bandages", 0)
+        if bandages_enabled:
+            for w in range(1, 6):
+                for region in ("light", "dark"):
+                    indices = range(20)
+                    for li in indices:
+                        comp = game.read_comp(sp, w, li, region)
+                        if comp >= 0 and (comp & FLAG_BANDAGE):
+                            lv1 = li + 1
+                            bname = None
+                            if region == "light":
+                                bname = light_bandage_name(w, lv1)
+                            elif region == "dark":
+                                bname = dark_bandage_name(w, lv1)
+                            if bname:
+                                loc = self.loc_id(bname)
+                                if loc and loc not in self.locations_checked:
+                                    precheck.append(loc)
+                                    bandage_count += 1
+                            # Revoke bandage bit
+                            game.write_comp(sp, w, li, region, comp & MASK_CLEAR_BANDAGE)
+
+                # Warp bandages: collect per-zone, assign Bandage 1/2 in slot order
+                for zone_idx in range(4):
+                    info = WARP_ZONE_INFO.get((w, zone_idx))
+                    if not info:
+                        continue
+                    host_lv, is_dark, wname = info
+                    name_fn = dw_warp_bandage_name if is_dark else lw_warp_bandage_name
+                    bandage_num = 0
+                    for sub in range(3):
+                        si = zone_idx * 3 + sub
+                        comp = game.read_comp(sp, w, si, "warp")
+                        if comp >= 0 and (comp & FLAG_BANDAGE):
+                            bandage_num += 1
+                            bname = name_fn(w, host_lv, bandage_num)
+                            if bname:
+                                loc = self.loc_id(bname)
+                                if loc and loc not in self.locations_checked:
+                                    precheck.append(loc)
+                                    bandage_count += 1
+                            # Revoke
+                            game.write_comp(sp, w, si, "warp", comp & MASK_CLEAR_BANDAGE)
+        if bandage_count:
+            self.log(f"  Pre-existing bandages: {bandage_count}", "info")
+
+        # A+ grades
+        aplus_count = 0
+        aplus_miss = 0
+        for w in range(1, 8):
+            num = NUM_LEVELS.get(w, 20)
+            for region in ("light", "dark"):
+                if region == "dark" and not dark_enabled:
+                    continue
+                for li in range(num):
+                    comp = game.read_comp(sp, w, li, region)
+                    if comp >= 0 and (comp & FLAG_COMPLETE):
+                        tval = game.read_time(sp, w, li, region)
+                        if (w, li) in self.fake_aplus_times and region == "light":
+                            fake_val = get_par_time(w, li, region)
+                            if fake_val is not None and abs(tval - (fake_val - 0.001)) < 0.0005:
+                                continue
+                            else:
+                                self.fake_aplus_times.discard((w, li))
+                        if tval > 0 and is_a_plus(tval, w, li, region):
+                            aplus_count += 1
+                            lv1 = li + 1
+                            if region == "light":
+                                aname = light_aplus_name(w, lv1)
+                            else:
+                                aname = dark_aplus_name(w, lv1)
+                            if aname:
+                                loc = self.loc_id(aname)
+                                if loc and loc not in self.locations_checked:
+                                    precheck.append(loc)
+                                elif not loc:
+                                    aplus_miss += 1
+        if aplus_count:
+            self.log(f"  Pre-existing A+ grades: {aplus_count}"
+                     f"{f' ({aplus_miss} not in DataPackage)' if aplus_miss else ''}",
+                     "info")
+
+        # Warp zone completions
+        warp_count = 0
+        for w in range(1, 6):
+            for zone_idx in range(4):
+                all_done = True
+                for sub in range(3):
+                    si = zone_idx * 3 + sub
+                    comp = game.read_comp(sp, w, si, "warp")
+                    if comp < 0 or not (comp & FLAG_COMPLETE):
+                        all_done = False
+                        break
+                if all_done:
+                    warps_completed.add((w, zone_idx))
+                    info = WARP_ZONE_INFO.get((w, zone_idx))
+                    if info:
+                        host_lv, is_dark, wname = info
+                        if is_dark:
+                            loc_name = dw_warp_completion_name(w, host_lv)
+                        else:
+                            loc_name = lw_warp_completion_name(w, host_lv)
+                        if loc_name:
+                            loc = self.loc_id(loc_name)
+                            if loc and loc not in self.locations_checked:
+                                precheck.append(loc)
+                                warp_count += 1
+        if warp_count:
+            self.log(f"  Pre-existing warp completions: {warp_count}", "info")
+
+        # Achievement pre-scan
+        if achievements_enabled:
+            ach_checks = []
+            self._check_achievements(
+                game, sp, ach_checks,
+                achievements_enabled, dark_enabled,
+                worlds_cleared, worlds_dark_cleared,
+                milestones_sent, warp_milestones_sent,
+                warps_completed,
+                speedrun_sent, speedrun_enabled,
+                deathless_sent, deathless_enabled,
+            )
+            precheck.extend(ach_checks)
+            if ach_checks:
+                self.log(f"  Pre-existing achievements: {len(ach_checks)}", "info")
+
+        if precheck:
+            await self.send_location_checks(precheck)
+            self.log(f"Pre-existing progress: {len(precheck)} locations sent", "success")
+
+    
+    # NETWORK
+    
 
     async def send_message(self, msg: dict):
         if self.ws:
@@ -625,32 +1351,47 @@ class APClient:
         cmd = msg.get("cmd", "")
 
         if cmd == "RoomInfo":
-            self.log("Connected to room, requesting data...", "info")
-            games = msg.get("games", [])
+            self.server_version = msg.get("version", {"major": 0, "minor": 5, "build": 1})
+            sv = self.server_version
+            self.log(f"Connected to room (AP v{sv.get('major',0)}.{sv.get('minor',0)}.{sv.get('build',0)}), requesting data...", "info")
             await self.send_message({
                 "cmd": "GetDataPackage",
-                "games": games
+                "games": msg.get("games", [])
             })
-            await self.send_connect()
+            await self._send_connect()
 
         elif cmd == "DataPackage":
             data = msg.get("data", {}).get("games", {})
             for game_name, game_data in data.items():
-                items = game_data.get("item_name_to_id", {})
-                locations = game_data.get("location_name_to_id", {})
-                for name, id in items.items():
-                    self.all_items[id] = name
-                for name, id in locations.items():
-                    self.all_locations[id] = name
-            self.log(f"Loaded data for {len(data)} game(s)", "info")
+                for name, iid in game_data.get("item_name_to_id", {}).items():
+                    self.item_id_to_name[iid] = name
+                for name, lid in game_data.get("location_name_to_id", {}).items():
+                    self.loc_name_to_id[name] = lid
+                    self.loc_id_to_name[lid] = name
+            self.log(f"Loaded DataPackage: {len(self.loc_name_to_id)} locations, "
+                     f"{len(self.item_id_to_name)} items", "info")
+            # Diagnostic: check if A+ locations exist in DataPackage
+            test_names = [
+                light_aplus_name(1, 1),   # "1-1 Hello World (A+ Rank)"
+                dark_aplus_name(2, 8),    # "2-8X Grape Soda (A+ Rank)"
+                light_aplus_name(6, 1),   # "6-1 The Pit (A+ Rank)"
+            ]
+            found = sum(1 for n in test_names if n and n in self.loc_name_to_id)
+            if found < len(test_names):
+                missing = [n for n in test_names if n and n not in self.loc_name_to_id]
+                self.log(f"WARNING: A+ locations missing from DataPackage: {missing}", "error")
+                # Try to find what A+ names look like
+                aplus_locs = [n for n in self.loc_name_to_id if "A+" in n or "Rank" in n]
+                if aplus_locs:
+                    self.log(f"  DataPackage A+ samples: {aplus_locs[:5]}", "debug")
+                else:
+                    self.log("  No A+/Rank locations found in DataPackage", "debug")
 
         elif cmd == "Connected":
             self.connected = True
             self.team = msg.get("team", 0)
-            self.slot_info = msg.get("slot_info", {})
             self.slot_data = msg.get("slot_data", {})
-            checked = msg.get("checked_locations", [])
-            self.locations_checked = set(checked)
+            self.locations_checked = set(msg.get("checked_locations", []))
 
             for player in msg.get("players", []):
                 self.players[player["slot"]] = player["name"]
@@ -661,36 +1402,19 @@ class APClient:
             self.log(f"  Already checked: {len(self.locations_checked)} locations", "info")
 
             # Log slot data
-            goal = self.slot_data.get("goal", 0)
-            goal_names = {
-                0: "Beat Rapture Boss", 1: "Beat All Bosses",
-                2: "Beat Dr. Fetus", 3: "Beat Dark Dr. Fetus",
-            }
-            self.log(f"  Goal: {goal_names.get(goal, f'Unknown({goal})')}", "info")
-            if self.slot_data.get("dark_world_levels"):
-                self.log("  Dark World Levels: ENABLED", "info")
-            if self.slot_data.get("aplus_locations"):
-                self.log("  A+ Locations: ENABLED", "info")
-            if self.slot_data.get("w7_locations"):
-                self.log("  Cotton Alley: ENABLED", "info")
-            if self.slot_data.get("character_warp_locations", False):
-                self.log("  Character Warp Locations: ENABLED", "info")
-            if self.slot_data.get("warp_completion_locations", False):
-                self.log("  Warp Completion Locations: ENABLED", "info")
-            if self.slot_data.get("achievement_locations", False):
-                self.log("  Achievement Locations: ENABLED", "info")
-            bandages_req = self.slot_data.get("bandages_required", 0)
-            if bandages_req > 0:
-                self.log(f"  Bandages Required: {bandages_req}", "info")
-            boss_mode = self.slot_data.get("boss_token_mode", "vanilla")
-            if boss_mode == "tokens":
-                costs = {w: self.slot_data.get(f"boss_tokens_w{w}", 0) for w in range(1, 7)}
-                total = sum(costs.values())
-                self.log(f"  Boss Tokens: ENABLED ({total} total)", "info")
-                per_world = ", ".join(f"{BOSS_TOKEN_NAMES[w]}={costs[w]}" for w in range(1, 7) if costs[w] > 0)
-                self.log(f"    {per_world}", "info")
-            if self.slot_data.get("require_all_bosses", False):
-                self.log("  Require All Bosses: W1-W5 bosses needed for The End", "info")
+            goal = self._parse_goal(self.slot_data.get("goal", 0))
+            self.log(f"  Goal: {goal}", "info")
+            if self.slot_data.get("dark_world", 0):
+                self.log("  Dark World: ENABLED", "info")
+            hard = self.slot_data.get("hard_chapter_levels", set())
+            if hard:
+                self.log(f"  Hard Chapters: {hard}", "info")
+            if self.slot_data.get("bandages", 0):
+                self.log("  Bandages: ENABLED", "info")
+            if self.slot_data.get("boss_tokens", 0):
+                self.log("  Boss Tokens: ENABLED", "info")
+            boss_req = self.slot_data.get("boss_req", 17)
+            self.log(f"  Boss Req: {boss_req}", "info")
 
             self.set_status("Connected", "#00ff00")
 
@@ -699,46 +1423,35 @@ class APClient:
             if start_index == 0:
                 self.items_received = []
                 self.items_processed = 0
-
             for item in msg.get("items", []):
-                item_id = item["item"]
+                iid = item["item"]
                 sender = self.players.get(item["player"], "Server")
-                item_name = self.get_item_name(item_id)
+                iname = self.get_item_name(iid)
                 self.items_received.append({
-                    "id": item_id,
-                    "name": item_name,
-                    "sender": sender,
+                    "id": iid, "name": iname, "sender": sender,
                 })
-                self.log(f"Received: {item_name} from {sender}", "item")
+                self.log(f"Received: {iname} from {sender}", "item")
 
         elif cmd == "PrintJSON":
-            text_parts = []
+            parts = []
             for part in msg.get("data", []):
                 if isinstance(part, dict):
-                    part_type = part.get("type")
-                    part_text = part.get("text", "")
-
-                    if part_type == "player_id":
-                        try:
-                            text_parts.append(self.get_player_name(int(part_text)))
-                        except ValueError:
-                            text_parts.append(part_text)
-                    elif part_type == "item_id":
-                        try:
-                            text_parts.append(self.get_item_name(int(part_text)))
-                        except ValueError:
-                            text_parts.append(part_text)
-                    elif part_type == "location_id":
-                        try:
-                            text_parts.append(self.get_location_name_by_id(int(part_text)))
-                        except ValueError:
-                            text_parts.append(part_text)
+                    pt = part.get("type")
+                    txt = part.get("text", "")
+                    if pt == "player_id":
+                        try: parts.append(self.get_player_name(int(txt)))
+                        except: parts.append(txt)
+                    elif pt == "item_id":
+                        try: parts.append(self.get_item_name(int(txt)))
+                        except: parts.append(txt)
+                    elif pt == "location_id":
+                        try: parts.append(self.get_location_name(int(txt)))
+                        except: parts.append(txt)
                     else:
-                        text_parts.append(part_text)
+                        parts.append(txt)
                 else:
-                    text_parts.append(str(part))
-
-            text = "".join(text_parts)
+                    parts.append(str(part))
+            text = "".join(parts)
             if text:
                 self.log(f"[Server] {text}", "server")
 
@@ -747,726 +1460,167 @@ class APClient:
             self.log(f"Connection refused: {', '.join(errors)}", "error")
             self.set_status("Refused", "#ff4444")
 
-    async def send_connect(self):
+    async def _send_connect(self):
         import uuid
-        msg = {
+        # Use server version from RoomInfo to guarantee compatibility.
+        # Fallback to 0.6.4 (minimum required by the SMB APWorld).
+        version = getattr(self, 'server_version',
+                          {"major": 0, "minor": 6, "build": 4})
+        # Ensure class field is present (required for dict-based versions)
+        if isinstance(version, dict) and "class" not in version:
+            version = dict(version)
+            version["class"] = "Version"
+        await self.send_message({
             "cmd": "Connect",
             "game": GAME_NAME,
             "name": self.slot,
             "uuid": str(uuid.uuid4()),
-            "version": {"major": 0, "minor": 5, "build": 1, "class": "Version"},
+            "version": version,
             "items_handling": 0b111,
             "tags": [],
             "password": self.password,
             "slot_data": True,
-        }
-        await self.send_message(msg)
-
-    async def send_location_checks(self, locations: List[int]):
-        if not self.connected or not locations:
-            return
-
-        new_locs = [loc for loc in locations if loc not in self.locations_checked]
-        if not new_locs:
-            return
-
-        self.locations_checked.update(new_locs)
-        await self.send_message({"cmd": "LocationChecks", "locations": new_locs})
-
-        for loc in new_locs:
-            loc_name = self.get_location_name_by_id(loc)
-            self.log(f"Checked: {loc_name}", "location")
-
-    async def send_goal_complete(self):
-        if not self.goal_completed:
-            self.goal_completed = True
-            await self.send_message({"cmd": "StatusUpdate", "status": 30})
-            self.log("GOAL COMPLETE!", "success")
-            self.log("Congratulations! You can disconnect or keep playing.", "info")
+        })
 
     def get_new_items(self) -> List[Dict]:
-        """Get items that haven't been processed yet."""
         new = self.items_received[self.items_processed:]
         self.items_processed = len(self.items_received)
         return new
 
-    # =========================================================================
-    # BOSS TOKEN HELPERS
-    # =========================================================================
+    
+    # ITEM PROCESSING
+    
 
-    def _update_boss_tokens(self, game, sp, boss_token_costs):
-        """Check if any new bosses should unlock based on per-world token counts.
+    def _process_item(self, item, game, sp):
+        """Process a received item and apply game effects. Returns log message or None."""
+        iid = item["id"]
+        self._received_item_ids.add(iid)
 
-        Each boss requires N of its own world's token type.
-        Returns list of newly unlocked world numbers.
-        """
-        newly_unlocked = []
-        for w, needed in boss_token_costs.items():
-            if needed <= 0 or w in self.boss_unlocked:
-                continue
-            if self.boss_token_counts.get(w, 0) >= needed:
-                self.boss_unlocked.add(w)
-                threshold = BOSS_UNLOCK_THRESHOLDS[w]
-                game.write_boss_counter(sp, w, threshold)
-                newly_unlocked.append(w)
-        return newly_unlocked
-
-    def _enforce_boss_counters(self, game, sp, boss_token_costs=None):
-        """Enforce boss counter values for all token-gated worlds.
-
-        - Unlocked bosses: ensure counter stays at/above threshold
-          (game resets it to real completion count on level beat).
-        - Locked bosses: suppress counter to 0 so normal level
-          completions can't bypass the token requirement.
-        """
-        # Re-raise unlocked boss counters
-        for w in self.boss_unlocked:
-            threshold = BOSS_UNLOCK_THRESHOLDS.get(w)
-            if threshold is not None:
-                current = game.read_boss_counter(sp, w)
-                if 0 <= current < threshold:
-                    game.write_boss_counter(sp, w, threshold)
-
-        # Suppress locked boss counters
-        if boss_token_costs:
-            for w in boss_token_costs:
-                if w not in self.boss_unlocked:
-                    current = game.read_boss_counter(sp, w)
-                    if current > 0:
-                        game.write_boss_counter(sp, w, 0)
-
-    def _dark_level_unlocked(self, world, level_index):
-        """Check if a dark level is unlocked based on progressive item count."""
-        if not self.dark_lock_enabled:
-            return True
-        if world < 1 or world > 5:
-            return True
-        levels_per_item = 20 // self.dark_unlocks_per_world
-        needed = (level_index // levels_per_item) + 1
-        return self.dark_access_counts.get(world, 0) >= needed
-
-    def _enforce_dark_locks(self, game, sp):
-        """Suppress A+ times on light levels whose dark counterpart is locked.
-
-        The game unlocks dark versions when light best time <= par.
-        Write par + 1.0s to keep dark locked until AP sends the unlock item.
-        """
-        if not self.dark_lock_enabled:
-            return
-        for w in range(1, 6):
-            for li in range(20):
-                if self._dark_level_unlocked(w, li):
-                    # Restore real time if we have it and level is now unlocked
-                    real = self.real_best_times.get((w, li))
-                    par = get_par_time(w, li, "light")
-                    if real is not None and par is not None and real <= par:
-                        current = game.read_time(sp, w, li, "light")
-                        if current > par:
-                            game.write_time(sp, w, li, "light", real)
-                    # If level has a fake grant time and player replayed,
-                    # the game wrote a new real time — clear the fake flag
-                    if (w, li) in self.fake_aplus_times and par is not None:
-                        current = game.read_time(sp, w, li, "light")
-                        fake_val = par - 0.001
-                        if abs(current - fake_val) > 0.0005:
-                            self.fake_aplus_times.discard((w, li))
-                    continue
-                par = get_par_time(w, li, "light")
-                if par is None:
-                    continue
-                t = game.read_time(sp, w, li, "light")
-                if t > 0 and t <= par:
-                    self.real_best_times[(w, li)] = t
-                    game.write_time(sp, w, li, "light", par + DARK_LOCK_TIME_PENALTY)
-
-    def _grant_dark_access(self, game, sp, world):
-        """Apply a dark access item for a world — restore times for newly unlocked levels."""
-        for li in range(20):
-            if not self._dark_level_unlocked(world, li):
-                continue
-            real = self.real_best_times.get((world, li))
-            par = get_par_time(world, li, "light")
-            if par is None:
-                continue
-            if real is not None and real > 0 and real <= par:
-                game.write_time(sp, world, li, "light", real)
-                self.fake_aplus_times.discard((world, li))
-            else:
-                # Player hasn't gotten A+ yet — write fake sub-par time
-                # to unlock dark level visually, but mark as fake
-                comp = game.read_comp(sp, world, li, "light")
-                if comp >= 0 and (comp & FLAG_COMPLETE):
-                    current_t = game.read_time(sp, world, li, "light")
-                    if current_t > par:
-                        game.write_time(sp, world, li, "light", par - 0.001)
-                        self.fake_aplus_times.add((world, li))
-
-    # =========================================================================
-    # DETECTION HELPERS
-    # =========================================================================
-
-    def _check_aplus(self, game, sp, world, level_index, region, checks,
-                     aplus_enabled):
-        """Check if a level now qualifies for A+ and add to checks if new.
-        
-        Always logs A+ achievements regardless of aplus_enabled.
-        Only sends AP location checks when aplus_enabled is True.
-        """
-        comp = game.read_comp(sp, world, level_index, region)
-        if comp < 0 or not (comp & FLAG_COMPLETE):
-            return
-        time_val = game.read_time(sp, world, level_index, region)
-        par = get_par_time(world, level_index, region)
-        if time_val <= 0:
-            self.log(f"DEBUG A+: W{world} L{level_index} {region} "
-                     f"time={time_val} (not written yet?)", "debug")
-            return
-        if par is None:
-            self.log(f"DEBUG A+: W{world} L{level_index} {region} "
-                     f"no par time!", "debug")
-            return
-        # If dark lock suppressed this time, use the real best time instead
-        if (self.dark_lock_enabled and region == "light"
-                and 1 <= world <= 5 and time_val > par):
-            real = self.real_best_times.get((world, level_index))
-            if real is not None and real > 0 and real <= par:
-                time_val = real
-        # Skip fake sub-par times written by _grant_dark_access
-        if (world, level_index) in self.fake_aplus_times and region == "light":
-            return
-        if time_val > par:
-            return
-        # Always log A+ grade
-        name = get_level_name(world, level_index, region) or "?"
-        suffix = "X" if region == "dark" else ""
-        aplus_id = get_aplus_location_id(world, level_index, region)
-        if aplus_id and aplus_id not in self.locations_checked and aplus_id not in self.aplus_logged:
-            self.aplus_logged.add(aplus_id)
-            self.log(f"A+ {world}-{level_index+1}{suffix} {name} "
-                     f"({time_val:.3f}s <= {par:.3f}s)", "location")
-            if aplus_enabled:
-                checks.append(aplus_id)
-            else:
-                self.log(f"DEBUG A+: detected but aplus_enabled=False", "debug")
-
-    def _aplus_sweep(self, game, sp, world, aplus_enabled,
-                     dark_world_enabled, w7_enabled):
-        """Sweep all levels in a world for unchecked A+ grades and completions.
-
-        During mid-play auto-transitions the game may not flush the best
-        time to save data before our handler reads it.  This sweep runs
-        when the player returns to level select (save fully flushed) and
-        catches any A+ grades that were missed.
-
-        Also catches completions that may have been missed for similar
-        timing reasons.
-        """
-        checks = []
-        num_lv = NUM_LEVELS.get(world, 20)
-
-        for region in ("light", "dark"):
-            # Skip regions that aren't enabled
-            if region == "dark":
-                if world <= 5 and not dark_world_enabled:
-                    continue
-                if world == 6 and not dark_world_enabled:
-                    continue
-                if world == 7 and not w7_enabled:
-                    continue
-            if region == "light":
-                if world == 7 and not w7_enabled:
-                    continue
-
-            for li in range(num_lv):
-                comp = game.read_comp(sp, world, li, region)
-                if comp < 0 or not (comp & FLAG_COMPLETE):
-                    continue
-
-                # Check completion location
-                loc_id = get_completion_location_id(world, li, region)
-                if loc_id and loc_id not in self.locations_checked:
-                    checks.append(loc_id)
-
-                # Check A+
-                if aplus_enabled:
-                    time_val = game.read_time(sp, world, li, region)
-                    if time_val <= 0:
-                        continue
-                    par = get_par_time(world, li, region)
-                    if par is None:
-                        continue
-                    # If dark lock suppressed this time, use real best time
-                    if (self.dark_lock_enabled and region == "light"
-                            and 1 <= world <= 5 and time_val > par):
-                        real = self.real_best_times.get((world, li))
-                        if real is not None and real > 0 and real <= par:
-                            time_val = real
-                    # Skip fake sub-par times written by _grant_dark_access
-                    if (world, li) in self.fake_aplus_times and region == "light":
-                        continue
-                    if time_val > par:
-                        continue
-                    aplus_id = get_aplus_location_id(world, li, region)
-                    if aplus_id and aplus_id not in self.locations_checked and aplus_id not in self.aplus_logged:
-                        self.aplus_logged.add(aplus_id)
-                        name = get_level_name(world, li, region) or "?"
-                        suffix = "X" if region == "dark" else ""
-                        self.log(f"A+ {world}-{li+1}{suffix} {name} "
-                                 f"({time_val:.3f}s <= {par:.3f}s) [sweep]", "location")
-                        checks.append(aplus_id)
-
-        return checks
-
-    def _check_gotwarp(self, ev, cv, world, level_index, region, checks):
-        """Log if GotWarp bit (0x08) was newly set on a host level."""
-        if ev < 0 or cv < 0:
-            return
-        if not (ev & FLAG_WARP) and (cv & FLAG_WARP):
-            lv_1idx = level_index + 1
-            host_key = (world, lv_1idx, region)
-            zone_idx = WARP_HOST_TO_ZONE.get(host_key)
-            if zone_idx is not None:
-                wname = WARP_ZONE_NAMES.get((world, zone_idx), "?")
-                suffix = "X" if region == "dark" else ""
-                self.log(f"Warp Found: {wname} (from {world}-{lv_1idx}{suffix})", "game")
-
-    def _check_character_unlock(self, game, sp, world, checks,
-                                char_warp_enabled, characters_unlocked):
-        """Check if all 3 character warp sub-levels are complete."""
-        if not char_warp_enabled or world not in CHARACTER_WARPS:
-            return
-        if world in characters_unlocked:
-            return
-        for slot_idx in CHARACTER_WARP_SLOTS:  # 3, 4, 5
-            comp = game.read_comp(sp, world, slot_idx, "warp")
-            if comp < 0 or not (comp & FLAG_COMPLETE):
-                return
-        characters_unlocked.add(world)
-        char_id = character_unlock_location_id(world)
-        if char_id not in self.locations_checked:
-            char_name = CHARACTER_WARPS[world][0]
-            checks.append(char_id)
-            self.log(f"Character Unlocked: {char_name}!", "success")
-
-    def _check_warp_completion(self, game, sp, world, checks,
-                               warp_complete_enabled, warps_completed):
-        """Check if any warp zone (3 sub-levels) is fully complete."""
-        if not warp_complete_enabled or world > 5:
-            return
-        for zone_idx in range(4):
-            if (world, zone_idx) in warps_completed:
-                continue
-            all_done = True
-            for sub in range(3):
-                slot_idx = zone_idx * 3 + sub
-                comp = game.read_comp(sp, world, slot_idx, "warp")
-                if comp < 0 or not (comp & FLAG_COMPLETE):
-                    all_done = False
-                    break
-            if all_done:
-                warps_completed.add((world, zone_idx))
-                wc_id = warp_completion_location_id(world, zone_idx)
-                if wc_id not in self.locations_checked:
-                    wname = WARP_ZONE_NAMES.get((world, zone_idx), f"Zone {zone_idx}")
-                    checks.append(wc_id)
-                    self.log(f"Warp Complete: {wname}", "location")
-
-    def _check_achievements(self, game, sp, checks,
-                            achievements_enabled, worlds_cleared, worlds_dark_cleared,
-                            milestones_sent, aplus_enabled,
-                            warps_completed=None, warp_milestones_sent=None,
-                            world_aplus_sent=None):
-        """Check for world clears, bandage milestones, warp milestones,
-        per-world A+, and meta-achievements."""
-        if not achievements_enabled:
-            return
-
-        # World clear checks
-        for w in range(1, 8):
-            num_lv = NUM_LEVELS.get(w, 20)
-
-            if w not in worlds_cleared:
-                all_light = True
-                for li in range(num_lv):
-                    comp = game.read_comp(sp, w, li, "light")
-                    if comp < 0 or not (comp & FLAG_COMPLETE):
-                        all_light = False
-                        break
-                if all_light:
-                    worlds_cleared.add(w)
-                    if w <= 5:
-                        cid = world_clear_location_id(w)
-                    elif w == 6:
-                        cid = w6_clear_location_id()
-                    else:
-                        cid = w7_clear_location_id()
-                    if cid not in self.locations_checked:
-                        checks.append(cid)
-                        self.log(f"World Clear: {WORLD_NAMES.get(w, f'W{w}')}!", "success")
-
-            if w not in worlds_dark_cleared:
-                all_dark = True
-                for li in range(num_lv):
-                    comp = game.read_comp(sp, w, li, "dark")
-                    if comp < 0 or not (comp & FLAG_COMPLETE):
-                        all_dark = False
-                        break
-                if all_dark:
-                    worlds_dark_cleared.add(w)
-                    if w <= 5:
-                        cid = world_dark_clear_location_id(w)
-                    elif w == 6:
-                        cid = w6_dark_clear_location_id()
-                    else:
-                        cid = w7_dark_clear_location_id()
-                    if cid not in self.locations_checked:
-                        checks.append(cid)
-                        self.log(f"Dark Clear: {WORLD_NAMES.get(w, f'W{w}')}!", "success")
-
-        # Bandage milestones
-        for milestone in BANDAGE_MILESTONES:
-            if milestone in milestones_sent:
-                continue
-            if self.bandage_count >= milestone:
-                milestones_sent.add(milestone)
-                mid = bandage_milestone_location_id(milestone)
-                if mid not in self.locations_checked:
-                    checks.append(mid)
-                    self.log(f"Bandage Milestone: {milestone}!", "success")
-
-        # Warp zone milestones (Nostalgia, Living in the Past, etc.)
-        if warp_milestones_sent is not None:
-            # Count total completed warp zones from save data
-            total_warps_done = 0
-            for w in range(1, 6):
-                for zone_idx in range(4):
-                    zone_done = True
-                    for sub in range(3):
-                        si = zone_idx * 3 + sub
-                        comp = game.read_comp(sp, w, si, "warp")
-                        if comp < 0 or not (comp & FLAG_COMPLETE):
-                            zone_done = False
-                            break
-                    if zone_done:
-                        total_warps_done += 1
-
-            for threshold, loc_id in WARP_MILESTONE_LOCS.items():
-                if threshold in warp_milestones_sent:
-                    continue
-                if total_warps_done >= threshold:
-                    warp_milestones_sent.add(threshold)
-                    if loc_id not in self.locations_checked:
-                        name = WARP_MILESTONE_NAMES[threshold]
-                        checks.append(loc_id)
-                        self.log(f"Warp Milestone: {name} ({total_warps_done} warps)!", "success")
-
-        # Per-world light A+ achievements (Rare, Medium Rare, etc.)
-        if world_aplus_sent is not None and aplus_enabled:
-            for w in range(1, 6):
-                if w in world_aplus_sent:
-                    continue
-                loc_id = WORLD_APLUS_LOCS.get(w)
-                if not loc_id or loc_id in self.locations_checked:
-                    continue
-                all_aplus = True
-                for li in range(20):
-                    comp = game.read_comp(sp, w, li, "light")
-                    if comp < 0 or not (comp & FLAG_COMPLETE):
-                        all_aplus = False
-                        break
-                    if (w, li) in self.fake_aplus_times:
-                        all_aplus = False
-                        break
-                    tval = game.read_time(sp, w, li, "light")
-                    if not is_a_plus(tval, w, li, "light"):
-                        all_aplus = False
-                        break
-                if all_aplus:
-                    world_aplus_sent.add(w)
-                    checks.append(loc_id)
-                    name = WORLD_APLUS_NAMES[w]
-                    self.log(f"World A+: {name} ({WORLD_NAMES.get(w, f'W{w}')})!", "success")
-
-        # Golden God (all light A+) - always check, only send if enabled
-        gg_id = golden_god_location_id()
-        if gg_id not in self.locations_checked and gg_id not in self.aplus_logged:
-            all_aplus = True
-            for w in range(1, 6):
-                for li in range(20):
-                    comp = game.read_comp(sp, w, li, "light")
-                    if comp < 0 or not (comp & FLAG_COMPLETE):
-                        all_aplus = False
-                        break
-                    if (w, li) in self.fake_aplus_times:
-                        all_aplus = False
-                        break
-                    tval = game.read_time(sp, w, li, "light")
-                    if not is_a_plus(tval, w, li, "light"):
-                        all_aplus = False
-                        break
-                if not all_aplus:
-                    break
-            if all_aplus:
-                self.aplus_logged.add(gg_id)
-                self.log("THE GOLDEN GOD! All Light A+!", "success")
-                if aplus_enabled:
-                    checks.append(gg_id)
-
-        # Girl Boy (all dark A+) - always check, only send if enabled
-        gb_id = girl_boy_location_id()
-        if gb_id not in self.locations_checked and gb_id not in self.aplus_logged:
-            all_dark_aplus = True
-            for w in range(1, 6):
-                for li in range(20):
-                    comp = game.read_comp(sp, w, li, "dark")
-                    if comp < 0 or not (comp & FLAG_COMPLETE):
-                        all_dark_aplus = False
-                        break
-                    tval = game.read_time(sp, w, li, "dark")
-                    if not is_a_plus(tval, w, li, "dark"):
-                        all_dark_aplus = False
-                        break
-                if not all_dark_aplus:
-                    break
-            if all_dark_aplus:
-                self.aplus_logged.add(gb_id)
-                self.log("GIRL BOY! All Dark A+!", "success")
-                if aplus_enabled:
-                    checks.append(gb_id)
-
-    # =========================================================================
-    # INITIAL SYNC SCAN
-    # =========================================================================
-
-    async def _initial_sync_scan(self, game, sp,
-                                  aplus_enabled, w7_enabled, char_warp_enabled,
-                                  warp_complete_enabled, achievements_enabled,
-                                  dark_world_enabled,
-                                  characters_unlocked, warps_completed,
-                                  worlds_cleared, worlds_dark_cleared, milestones_sent,
-                                  warp_milestones_sent=None, world_aplus_sent=None):
-        """Scan save data on connection for pre-existing completions."""
-        self.log("Scanning save data for pre-existing progress...", "info")
-        precheck = []
-
-        # Pre-existing level completions â€” ALL worlds
-        comp_count = 0
-        for w in range(1, 8):
-            num_lv = NUM_LEVELS.get(w, 20)
-            for region in ("light", "dark"):
-                # Check enablement
-                if region == "light":
-                    if 1 <= w <= 6:
-                        pass  # always enabled
-                    elif w == 7 and not w7_enabled:
-                        continue
-                elif region == "dark":
-                    if 1 <= w <= 6 and not dark_world_enabled:
-                        continue
-                    elif w == 7 and not w7_enabled:
-                        continue
-
-                for li in range(num_lv):
-                    comp = game.read_comp(sp, w, li, region)
-                    if comp >= 0 and (comp & FLAG_COMPLETE):
-                        loc_id = get_completion_location_id(w, li, region)
-                        if loc_id and loc_id not in self.locations_checked:
-                            precheck.append(loc_id)
-                            comp_count += 1
-        if comp_count > 0:
-            self.log(f"  Pre-existing completions: {comp_count}", "info")
-
-        # Pre-existing bandages (collected before client was running)
-        bandage_count = 0
-        for w in range(1, 6):  # Only W1-W5 have bandages
-            for region in ("light", "dark", "warp"):
-                if region == "warp":
-                    indices = range(12)
+        # Chapter Keys -> world unlock
+        if iid in CHAPTER_KEY_ITEMS:
+            w = CHAPTER_KEY_ITEMS[iid]
+            if w not in self.allowed_worlds:
+                # W6 needs Meat Boy, W7 needs Bandage Girl
+                if w == 6 and not self._has_meat_boy():
+                    self.allowed_worlds.add(w)  # Track it, but don't unlock yet
+                    return f"Received: {WORLD_NAMES.get(w)} Key (need Meat Boy to enter)"
+                elif w == 7 and not self._has_bandage_girl():
+                    self.allowed_worlds.add(w)
+                    return f"Received: {WORLD_NAMES.get(w)} Key (need Bandage Girl to enter)"
                 else:
-                    indices = range(20)
-                for li in indices:
-                    comp = game.read_comp(sp, w, li, region)
-                    if comp >= 0 and (comp & FLAG_BANDAGE):
-                        ca = comp_addr(w, li, region)
-                        be = BANDAGE_BY_ADDR.get(ca)
-                        if be and be["ap_id"] not in self.locations_checked:
-                            precheck.append(be["ap_id"])
-                            bandage_count += 1
-                            # Revoke the bandage bit
-                            game.write_comp(sp, w, li, region, comp & MASK_CLEAR_BANDAGE)
-        if bandage_count > 0:
-            self.log(f"  Pre-existing bandages: {bandage_count}", "info")
+                    self.allowed_worlds.add(w)
+                    bitmask = self._compute_world_bitmask()
+                    if sp:
+                        game.set_world_unlock(sp, bitmask)
+                    return f"Unlocked: {WORLD_NAMES.get(w, f'Chapter {w}')}"
+            return None
 
-        # Pre-existing A+ grades (always scan & log, only send if enabled)
-        aplus_count = 0
-        for w in range(1, 8):
-            num_lv = NUM_LEVELS.get(w, 20)
-            for region in ("light", "dark"):
-                for li in range(num_lv):
-                    comp = game.read_comp(sp, w, li, region)
-                    if comp >= 0 and (comp & FLAG_COMPLETE):
-                        tval = game.read_time(sp, w, li, region)
-                        # Skip fake sub-par times from _grant_dark_access
-                        if (w, li) in self.fake_aplus_times and region == "light":
-                            continue
-                        if tval > 0 and is_a_plus(tval, w, li, region):
-                            aplus_count += 1
-                            if aplus_enabled:
-                                aid = get_aplus_location_id(w, li, region)
-                                if aid and aid not in self.locations_checked:
-                                    precheck.append(aid)
-            # Warps W1-W5 (sub-level checks, gated with aplus)
-            if w <= 5:
-                for si in range(12):
-                    comp = game.read_comp(sp, w, si, "warp")
-                    if comp >= 0 and (comp & FLAG_COMPLETE):
-                        tval = game.read_time(sp, w, si, "warp")
-                        if tval > 0 and is_a_plus(tval, w, si, "warp"):
-                            aplus_count += 1
-                            if aplus_enabled:
-                                aid = get_aplus_location_id(w, si, "warp")
-                                if aid and aid not in self.locations_checked:
-                                    precheck.append(aid)
-        if aplus_count > 0:
-            self.log(f"  A+ grades found: {aplus_count}"
-                     f"{'' if aplus_enabled else ' (tracking only, not sending)'}", "info")
+        # Boss Keys -> boss unlock counting
+        elif iid in BOSS_KEY_ITEMS:
+            w = BOSS_KEY_ITEMS[iid]
+            self.boss_key_counts[w] = self.boss_key_counts.get(w, 0) + 1
+            boss_req = self.slot_data.get("boss_req", 17)
+            if sp:
+                newly = self._update_boss_unlocks(game, sp, boss_req)
+                for bw in newly:
+                    self.log(f"Boss Unlocked: {WORLD_NAMES.get(bw, f'W{bw}')}!", "success")
+            needed = boss_req if w <= 5 else self.slot_data.get("lw_dr_fetus_req", 5)
+            have = self.boss_key_counts.get(w, 0)
+            return f"Chapter {w} Boss Key ({have}/{needed})"
 
-        # Pre-existing character unlocks
-        if char_warp_enabled:
-            for w in range(1, 6):
-                all_done = True
-                for slot_idx in CHARACTER_WARP_SLOTS:
-                    comp = game.read_comp(sp, w, slot_idx, "warp")
-                    if comp < 0 or not (comp & FLAG_COMPLETE):
-                        all_done = False
-                        break
-                if all_done:
-                    characters_unlocked.add(w)
-                    cid = character_unlock_location_id(w)
-                    if cid not in self.locations_checked:
-                        precheck.append(cid)
-                        char_name = CHARACTER_WARPS[w][0]
-                        self.log(f"  Pre-existing character: {char_name}", "info")
+        # Characters
+        elif iid in CHARACTER_ITEMS:
+            bit, name = CHARACTER_ITEMS[iid]
+            self.character_bits |= (1 << bit)
+            if sp:
+                game.set_char_bitmask(sp, self.character_bits)
+                # Meat Boy received -> re-check W6 access and all boss unlocks
+                if iid == ITEM_MEAT_BOY:
+                    bitmask = self._compute_world_bitmask()
+                    game.set_world_unlock(sp, bitmask)
+                    boss_req = self.slot_data.get("boss_req", 17)
+                    newly = self._update_boss_unlocks(game, sp, boss_req)
+                    for bw in newly:
+                        self.log(f"Boss Unlocked: {WORLD_NAMES.get(bw, f'W{bw}')}!", "success")
+                    if 6 in self.allowed_worlds:
+                        self.log(f"Chapter 6 now accessible!", "success")
+                # Bandage Girl received -> re-check W7 access
+                elif iid == ITEM_BANDAGE_GIRL:
+                    bitmask = self._compute_world_bitmask()
+                    game.set_world_unlock(sp, bitmask)
+                    if 7 in self.allowed_worlds:
+                        self.log(f"Chapter 7 now accessible!", "success")
+            return f"Unlocked: {name}"
 
-        # Pre-existing warp completions
-        if warp_complete_enabled:
-            for w in range(1, 6):
-                for zone_idx in range(4):
-                    all_done = True
-                    for sub in range(3):
-                        si = zone_idx * 3 + sub
-                        comp = game.read_comp(sp, w, si, "warp")
-                        if comp < 0 or not (comp & FLAG_COMPLETE):
-                            all_done = False
-                            break
-                    if all_done:
-                        warps_completed.add((w, zone_idx))
-                        wid = warp_completion_location_id(w, zone_idx)
-                        if wid not in self.locations_checked:
-                            precheck.append(wid)
+        # A+ Rank items -> dark level unlock
+        elif iid in APLUS_RANK_ITEMS:
+            w, lv1 = APLUS_RANK_ITEMS[iid]
+            self.aplus_items_received.add((w, lv1))
+            if sp and self.slot_data.get("dark_world", 0):
+                self._grant_aplus_item(game, sp, w, lv1)
+            return f"A+ Rank: {w}-{lv1} (dark {w}-{lv1}X unlocked)"
 
-        # Pre-existing world clears & achievements
-        if achievements_enabled:
-            for w in range(1, 8):
-                num_lv = NUM_LEVELS.get(w, 20)
-                # Light
-                all_light = all(
-                    (game.read_comp(sp, w, li, "light") or 0) & FLAG_COMPLETE
-                    for li in range(num_lv)
-                )
-                if all_light:
-                    worlds_cleared.add(w)
-                    if w <= 5:
-                        cid = world_clear_location_id(w)
-                    elif w == 6:
-                        cid = w6_clear_location_id()
-                    else:
-                        cid = w7_clear_location_id()
-                    if cid not in self.locations_checked:
-                        precheck.append(cid)
-                # Dark
-                all_dark = all(
-                    (game.read_comp(sp, w, li, "dark") or 0) & FLAG_COMPLETE
-                    for li in range(num_lv)
-                )
-                if all_dark:
-                    worlds_dark_cleared.add(w)
-                    if w <= 5:
-                        cid = world_dark_clear_location_id(w)
-                    elif w == 6:
-                        cid = w6_dark_clear_location_id()
-                    else:
-                        cid = w7_dark_clear_location_id()
-                    if cid not in self.locations_checked:
-                        precheck.append(cid)
+        # Bandage
+        elif iid == ITEM_BANDAGE:
+            self.bandage_count += 1
+            if sp and self.bandage_count <= len(BANDAGE_GRANT_TARGETS):
+                gw, gi, gr = BANDAGE_GRANT_TARGETS[self.bandage_count - 1]
+                val = game.read_comp(sp, gw, gi, gr)
+                if val >= 0:
+                    game.write_comp(sp, gw, gi, gr, val | FLAG_BANDAGE)
+            return f"Bandage ({self.bandage_count} total)"
 
-            # Bandage milestones
-            for milestone in BANDAGE_MILESTONES:
-                if self.bandage_count >= milestone:
-                    milestones_sent.add(milestone)
-                    mid = bandage_milestone_location_id(milestone)
-                    if mid not in self.locations_checked:
-                        precheck.append(mid)
+        # Boss Token
+        elif iid == ITEM_BOSS_TOKEN:
+            self.boss_token_count += 1
+            # Boss tokens can gate Larries/LW Dr. Fetus/DW Dr. Fetus
+            if sp:
+                boss_req_val = self.slot_data.get("boss_req", 17)
+                newly = self._update_boss_unlocks(game, sp, boss_req_val)
+                for bw in newly:
+                    self.log(f"Boss Unlocked: {WORLD_NAMES.get(bw, f'W{bw}')}!", "success")
+            return f"Boss Token ({self.boss_token_count})"
 
-            # Warp zone milestones
-            if warp_milestones_sent is not None:
-                total_warps_done = 0
-                for w in range(1, 6):
-                    for zone_idx in range(4):
-                        zone_done = True
-                        for sub in range(3):
-                            si = zone_idx * 3 + sub
-                            comp = game.read_comp(sp, w, si, "warp")
-                            if comp < 0 or not (comp & FLAG_COMPLETE):
-                                zone_done = False
-                                break
-                        if zone_done:
-                            total_warps_done += 1
-                for threshold, loc_id in WARP_MILESTONE_LOCS.items():
-                    if total_warps_done >= threshold:
-                        warp_milestones_sent.add(threshold)
-                        if loc_id not in self.locations_checked:
-                            precheck.append(loc_id)
-                if total_warps_done > 0:
-                    self.log(f"  Warp zones completed: {total_warps_done}", "info")
+        # Victory
+        elif iid == ITEM_VICTORY:
+            self.victory_received = True
+            return "VICTORY!"
 
-            # Per-world light A+ achievements
-            if world_aplus_sent is not None and aplus_enabled:
-                for w in range(1, 6):
-                    loc_id = WORLD_APLUS_LOCS.get(w)
-                    if not loc_id or loc_id in self.locations_checked:
-                        continue
-                    all_ap = True
-                    for li in range(20):
-                        comp = game.read_comp(sp, w, li, "light")
-                        if comp < 0 or not (comp & FLAG_COMPLETE):
-                            all_ap = False
-                            break
-                        if (w, li) in self.fake_aplus_times:
-                            all_ap = False
-                            break
-                        tval = game.read_time(sp, w, li, "light")
-                        if not is_a_plus(tval, w, li, "light"):
-                            all_ap = False
-                            break
-                    if all_ap:
-                        world_aplus_sent.add(w)
-                        precheck.append(loc_id)
+        # DW Dr. Fetus Key
+        elif iid == ITEM_DW_DR_FETUS_KEY:
+            self.dw_fetus_key_count += 1
+            needed = self.slot_data.get("dw_dr_fetus_req", 85)
+            # Re-check W6 boss unlock (DW keys can unlock W6 counter)
+            if sp:
+                boss_req_val = self.slot_data.get("boss_req", 17)
+                newly = self._update_boss_unlocks(game, sp, boss_req_val)
+                for bw in newly:
+                    self.log(f"Boss Unlocked: {WORLD_NAMES.get(bw, f'W{bw}')}!", "success")
+            return f"DW Dr. Fetus Key ({self.dw_fetus_key_count}/{needed})"
 
-        if precheck:
-            await self.send_location_checks(precheck)
-            self.log(f"Pre-existing progress: {len(precheck)} locations sent", "success")
+        # Ch7 Level Keys
+        elif iid == ITEM_CH7_LW_LEVEL_KEY:
+            self.ch7_lw_key_count += 1
+            return f"Ch7 LW Level Key ({self.ch7_lw_key_count}/20)"
 
-    # =========================================================================
+        elif iid == ITEM_CH7_DW_LEVEL_KEY:
+            self.ch7_dw_key_count += 1
+            return f"Ch7 DW Level Key ({self.ch7_dw_key_count}/20)"
+
+        # Degraded Bandage (filler, does nothing)
+        elif iid == ITEM_DEGRADED_BANDAGE:
+            return None  # Silent
+
+        return None
+
+    
     # MAIN RUN + GAME MONITOR
-    # =========================================================================
+    
 
     async def run(self, game: GameInterface):
         self._running = True
         self.loop = asyncio.get_event_loop()
-
         url = f"wss://{self.server}" if not self.server.startswith("ws") else self.server
-
         self.log(f"Connecting to {self.server}...", "info")
         self.set_status("Connecting...", "#ffcc00")
 
@@ -1474,16 +1628,13 @@ class APClient:
             async with websockets.connect(url, max_size=None) as ws:
                 self.ws = ws
                 self.log("WebSocket connected!", "success")
-
                 monitor_task = asyncio.create_task(self.game_monitor(game))
-
                 try:
                     async for message in ws:
                         if not self._running:
                             break
                         try:
-                            data = json.loads(message)
-                            for msg in data:
+                            for msg in json.loads(message):
                                 await self.handle_message(msg)
                         except json.JSONDecodeError:
                             pass
@@ -1491,7 +1642,6 @@ class APClient:
                     self.log(f"Connection closed: {e}", "error")
                 finally:
                     monitor_task.cancel()
-
         except Exception as e:
             self.log(f"Connection error: {e}", "error")
 
@@ -1502,92 +1652,123 @@ class APClient:
 
     async def game_monitor(self, game: GameInterface):
         """Monitor game state and send location checks."""
-        # --- State tracking ---
+        # State tracking
         last_playing = last_world = last_level = last_beaten = -1
-        last_lvl_type = -1
-        last_ui_state = -1
-        entry_comp = {}             # key â†’ comp byte at level entry
-        entry_times = {}            # key â†’ (comp, time) at level entry
-        warp_entry_slots = {}       # world â†’ [12 comp bytes]
-        warp_entry_full = {}        # world â†’ [(comp, time)] Ã— 12
+        last_lvl_type = last_ui_state = -1
+        entry_comp = {}
+        entry_region = {}           # (world, level) -> region at entry time
+        entry_dual = {}             # (world, level) -> (light_comp, dark_comp) at entry
+        warp_entry_slots = {}
+        warp_entry_full = {}
         pending_boss_world = 0
         pending_boss_time = 0
         pending_boss_dark = False
-
-        # New tracking state
-        characters_unlocked: Set[int] = set()
+        boss_entry_comp = -1  # Boss comp byte snapshot when entering level 99
+        last_detected_region = None  # Last region detected from dual snapshot
         warps_completed: Set[Tuple[int, int]] = set()
-        worlds_cleared: Set[int] = set()
-        worlds_dark_cleared: Set[int] = set()
-        milestones_sent: Set[int] = set()
-        warp_milestones_sent: Set[int] = set()  # 1, 5, 10, 20
-        world_aplus_sent: Set[int] = set()  # worlds with all-A+ achievement sent
+        bosses_beaten: Set[int] = set()
+        cutscenes_checked: Set[int] = set()
+        worlds_cleared: Set[int] = set()       # W6/W7 light clears
+        worlds_dark_cleared: Set[int] = set()   # W6/W7 dark clears
+        milestones_sent: Set[int] = set()       # Bandage milestones sent
+        warp_milestones_sent: Set[int] = set()  # Warp milestones sent
+        speedrun_sent: Set[int] = set()         # Speedrun achievements sent
+        deathless_sent: Set[Tuple[int, str]] = set()  # Deathless achievements sent
+        deathless_tracker: Dict = {}  # (world, region) -> tracking state
+        esc_cooldown = 0
+        poll_count = 0
 
-        # Wait for connection
-        self.log("Waiting for connection...", "info")
+        # Wait for connection + slot data
         for _ in range(50):
             if self.connected and self.slot_data:
                 break
             await asyncio.sleep(0.1)
-
         if not self.connected:
             self.log("Connection failed, stopping monitor", "error")
             return
 
-        # Read slot data options
-        dark_world_enabled = self.slot_data.get("dark_world_levels", False)
-        goal = self.slot_data.get("goal", 0)
-        bandages_req = self.slot_data.get("bandages_required", 0)
-        aplus_enabled = self.slot_data.get("aplus_locations", False)
-        w7_enabled = self.slot_data.get("w7_locations", False)
-        char_warp_enabled = self.slot_data.get("character_warp_locations", False)
-        warp_complete_enabled = self.slot_data.get("warp_completion_locations", False)
-        achievements_enabled = self.slot_data.get("achievement_locations", False)
-        boss_token_mode = self.slot_data.get("boss_token_mode", "vanilla")
-        boss_token_costs = {
-            w: self.slot_data.get(f"boss_tokens_w{w}", 0) for w in range(1, 7)
-        }
-        boss_tokens_enabled = (boss_token_mode == "tokens")
-        dark_lock_enabled = self.slot_data.get("dark_lock_mode", False)
-        self.dark_lock_enabled = dark_lock_enabled
-        self.dark_unlocks_per_world = self.slot_data.get("dark_unlocks_per_world", 4)
+        # Parse slot data
+        goal = self._parse_goal(self.slot_data.get("goal", 0))
+        dark_enabled = bool(self.slot_data.get("dark_world", 0))
+        boss_req = self.slot_data.get("boss_req", 17)
+        boss_tokens_enabled = bool(self.slot_data.get("boss_tokens", 0))
+        bandages_enabled = bool(self.slot_data.get("bandages", 0))
+        hard_chapters = self.slot_data.get("hard_chapter_levels", set())
+        if isinstance(hard_chapters, list):
+            hard_chapters = set(hard_chapters)
+        starting_chpt = self.slot_data.get("starting_chpt", 1)
+        achievements_enabled = bool(self.slot_data.get("achievements", 0))
+        deathless_enabled = bool(self.slot_data.get("deathless_achievements", 0))
+        speedrun_enabled = bool(self.slot_data.get("speedrun_achievements", 0))
+        xmas_enabled = bool(self.slot_data.get("xmas", 0))
 
-        self.log(f"Slot data: goal={goal}, dark={dark_world_enabled}, "
-                 f"aplus={aplus_enabled}, w7={w7_enabled}, "
-                 f"bandages_req={bandages_req}, "
-                 f"boss_tokens={'ON' if boss_tokens_enabled else 'OFF'}, "
-                 f"dark_lock={'ON' if dark_lock_enabled else 'OFF'}", "info")
+        self.log(f"Config: goal={goal}, dark={dark_enabled}, boss_req={boss_req}, "
+                 f"tokens={'ON' if boss_tokens_enabled else 'OFF'}, "
+                 f"bandages={'ON' if bandages_enabled else 'OFF'}, "
+                 f"achievements={'ON' if achievements_enabled else 'OFF'}, "
+                 f"deathless={'ON' if deathless_enabled else 'OFF'}, "
+                 f"speedrun={'ON' if speedrun_enabled else 'OFF'}, "
+                 f"xmas={'ON' if xmas_enabled else 'OFF'}", "info")
 
-        # Wait for initial items sync
-        self.log("Waiting for item sync...", "info")
+        # Clear stale client-written state BEFORE scanning.
+        # Previous sessions may have left bandage grants and fake A+ times
+        # in save data that would be falsely detected as player progress.
+        sp = game.get_sp()
+        if sp:
+            # Clear bandage grant slots (all dark + non-bandage light levels)
+            for gw, gi, gr in BANDAGE_GRANT_TARGETS:
+                val = game.read_comp(sp, gw, gi, gr)
+                if val >= 0 and (val & FLAG_BANDAGE):
+                    game.write_comp(sp, gw, gi, gr, val & MASK_CLEAR_BANDAGE)
+
+            # Clear fake A+ times (par - 0.001) left by previous session
+            for w in range(1, 8):
+                num = NUM_LEVELS.get(w, 20)
+                for li in range(num):
+                    par = get_par_time(w, li, "light")
+                    if par is None:
+                        continue
+                    tval = game.read_time(sp, w, li, "light")
+                    if tval > 0 and abs(tval - (par - 0.001)) < 0.0005:
+                        # This is a fake time — clear it to a non-A+ value
+                        game.write_time(sp, w, li, "light", par + 1.0)
+
+            self.log("Cleared stale bandage grants and fake A+ times", "info")
+
+        # Initial sync scan — now sees only genuine player progress
+        sp = game.get_sp()
+        if sp:
+            await self._initial_sync_scan(
+                game, sp, dark_enabled, warps_completed,
+                achievements_enabled, speedrun_enabled, deathless_enabled,
+                worlds_cleared, worlds_dark_cleared,
+                milestones_sent, warp_milestones_sent,
+                speedrun_sent, deathless_sent,
+            )
+
+        # Process initial items
         for _ in range(20):
             await asyncio.sleep(0.1)
             new_items = self.get_new_items()
+            sp = game.get_sp()
             for item in new_items:
-                iid = item["id"]
-                if iid in WORLD_ACCESS_ITEM_IDS:
-                    self.allowed_worlds.add(WORLD_ACCESS_ITEM_IDS[iid])
-                elif iid == ITEM_BANDAGE:
-                    self.bandage_count += 1
-                elif iid in CHARACTER_ITEMS:
-                    bit, name = CHARACTER_ITEMS[iid]
-                    self.character_bits |= (1 << bit)
-                elif iid in BOSS_TOKEN_IDS:
-                    w = BOSS_TOKEN_IDS[iid]
-                    self.boss_token_counts[w] = self.boss_token_counts.get(w, 0) + 1
-                    self.boss_token_count += 1
-                elif iid in DARK_ACCESS_IDS:
-                    w = DARK_ACCESS_IDS[iid]
-                    self.dark_access_counts[w] = self.dark_access_counts.get(w, 0) + 1
+                self._process_item(item, game, sp)
             if new_items:
                 break
 
-        # Apply initial world unlock + bandages + characters
-        bitmask = sum(1 << (w - 1) for w in self.allowed_worlds)
+        # Apply initial state
         sp = game.get_sp()
         if sp:
+            bitmask = self._compute_world_bitmask()
             game.set_world_unlock(sp, bitmask)
             game.set_char_bitmask(sp, self.character_bits)
+
+            # Clear stale bandage grant slots
+            for gw, gi, gr in BANDAGE_GRANT_TARGETS:
+                val = game.read_comp(sp, gw, gi, gr)
+                if val >= 0 and (val & FLAG_BANDAGE):
+                    game.write_comp(sp, gw, gi, gr, val & MASK_CLEAR_BANDAGE)
+            # Grant bandages
             for i in range(self.bandage_count):
                 if i < len(BANDAGE_GRANT_TARGETS):
                     gw, gi, gr = BANDAGE_GRANT_TARGETS[i]
@@ -1595,145 +1776,55 @@ class APClient:
                     if val >= 0:
                         game.write_comp(sp, gw, gi, gr, val | FLAG_BANDAGE)
 
-            # Apply initial boss tokens
-            if boss_tokens_enabled:
-                newly = self._update_boss_tokens(game, sp, boss_token_costs)
-                for w in newly:
-                    self.log(f"Boss pre-unlocked: {WORLD_NAMES.get(w, f'W{w}')}", "game")
+            # Boss unlocks
+            self._update_boss_unlocks(game, sp, boss_req)
+            self._enforce_boss_counters(game, sp, boss_req)
 
-            # Apply initial dark lock enforcement
-            if dark_lock_enabled:
+            # Dark lock enforcement + A+ item grants
+            if dark_enabled:
                 self._enforce_dark_locks(game, sp)
-                for w in range(1, 6):
-                    if self.dark_access_counts.get(w, 0) > 0:
-                        self._grant_dark_access(game, sp, w)
+                for w, lv1 in self.aplus_items_received:
+                    self._grant_aplus_item(game, sp, w, lv1)
 
-        boss_str = ""
-        if boss_tokens_enabled:
-            token_parts = []
-            for w in range(1, 7):
-                have = self.boss_token_counts.get(w, 0)
-                need = boss_token_costs.get(w, 0)
-                if need > 0:
-                    token_parts.append(f"W{w}:{have}/{need}")
-            boss_str = f", Tokens [{', '.join(token_parts)}]"
-        chars_unlocked = bin(self.character_bits).count('1') - 2  # minus Meat Boy + menu
-        dark_str = ""
-        if dark_lock_enabled:
-            dark_parts = []
-            for w in range(1, 6):
-                have = self.dark_access_counts.get(w, 0)
-                need = self.dark_unlocks_per_world
-                levels_per = 20 // need
-                unlocked = min(have * levels_per, 20)
-                dark_parts.append(f"W{w}:{unlocked}/20")
-            dark_str = f", Dark [{', '.join(dark_parts)}]"
         self.log(f"Synced: Worlds {sorted(self.allowed_worlds)}, "
                  f"Bandages {self.bandage_count}, "
-                 f"Characters {chars_unlocked}{boss_str}{dark_str}", "success")
-
-        # Initial sync scan for pre-existing progress
-        if sp:
-            await self._initial_sync_scan(
-                game, sp, aplus_enabled, w7_enabled, char_warp_enabled,
-                warp_complete_enabled, achievements_enabled, dark_world_enabled,
-                characters_unlocked, warps_completed,
-                worlds_cleared, worlds_dark_cleared, milestones_sent,
-                warp_milestones_sent, world_aplus_sent,
-            )
+                 f"Boss Keys {dict(self.boss_key_counts)}", "success")
 
         self.log("Monitoring game...", "info")
-
-        bosses_beaten = set()
-        esc_cooldown = 0
-        poll_count = 0
 
         while self._running and game.connected:
             poll_count += 1
             try:
-                # --- Process new items ---
+                # Process new items
                 new_items = self.get_new_items()
+                sp = game.get_sp()
                 for item in new_items:
-                    iid = item["id"]
-                    if iid in WORLD_ACCESS_ITEM_IDS:
-                        w = WORLD_ACCESS_ITEM_IDS[iid]
-                        if w not in self.allowed_worlds:
-                            self.allowed_worlds.add(w)
-                            bitmask = sum(1 << (ww - 1) for ww in self.allowed_worlds)
-                            sp = game.get_sp()
-                            if sp:
-                                game.set_world_unlock(sp, bitmask)
-                            self.log(f"Unlocked: {WORLD_NAMES.get(w, f'World {w}')}", "game")
-                    elif iid == ITEM_BANDAGE:
-                        self.bandage_count += 1
-                        sp = game.get_sp()
-                        if sp and self.bandage_count <= len(BANDAGE_GRANT_TARGETS):
-                            gw, gi, gr = BANDAGE_GRANT_TARGETS[self.bandage_count - 1]
-                            val = game.read_comp(sp, gw, gi, gr)
-                            if val >= 0:
-                                game.write_comp(sp, gw, gi, gr, val | FLAG_BANDAGE)
-                        self.log(f"Granted: Bandage ({self.bandage_count} total)", "game")
-                        # Check bandage milestones
-                        if achievements_enabled:
-                            ach_checks = []
-                            for milestone in BANDAGE_MILESTONES:
-                                if milestone not in milestones_sent and self.bandage_count >= milestone:
-                                    milestones_sent.add(milestone)
-                                    mid = bandage_milestone_location_id(milestone)
-                                    if mid not in self.locations_checked:
-                                        ach_checks.append(mid)
-                                        self.log(f"Bandage Milestone: {milestone}!", "success")
-                            if ach_checks:
-                                await self.send_location_checks(ach_checks)
-                    elif iid in CHARACTER_ITEMS:
-                        bit, name = CHARACTER_ITEMS[iid]
-                        self.character_bits |= (1 << bit)
-                        sp = game.get_sp()
-                        if sp:
-                            game.set_char_bitmask(sp, self.character_bits)
-                        self.log(f"Unlocked: {name}", "game")
-                    elif iid in BOSS_TOKEN_IDS:
-                        token_world = BOSS_TOKEN_IDS[iid]
-                        self.boss_token_counts[token_world] = self.boss_token_counts.get(token_world, 0) + 1
-                        self.boss_token_count += 1
-                        token_name = BOSS_TOKEN_NAMES[token_world]
-                        if boss_tokens_enabled:
-                            sp = game.get_sp()
-                            if sp:
-                                newly = self._update_boss_tokens(game, sp, boss_token_costs)
-                                for w in newly:
-                                    self.log(f"Boss Unlocked: {WORLD_NAMES.get(w, f'W{w}')}!", "success")
-                            needed = boss_token_costs.get(token_world, 0)
-                            have = self.boss_token_counts.get(token_world, 0)
-                            if token_world in self.boss_unlocked:
-                                self.log(f"{token_name} ({have}/{needed} - boss unlocked!)", "item")
-                            else:
-                                self.log(f"{token_name} ({have}/{needed})", "item")
-                        else:
-                            self.log(f"{token_name}", "item")
-                    elif iid in DARK_ACCESS_IDS:
-                        dw = DARK_ACCESS_IDS[iid]
-                        self.dark_access_counts[dw] = self.dark_access_counts.get(dw, 0) + 1
-                        sp = game.get_sp()
-                        if sp and dark_lock_enabled:
-                            self._grant_dark_access(game, sp, dw)
-                        count = self.dark_access_counts[dw]
-                        levels_per = 20 // self.dark_unlocks_per_world
-                        unlocked = min(count * levels_per, 20)
-                        self.log(f"Dark Access: {DARK_ACCESS_NAMES[dw]} "
-                                 f"({count}/{self.dark_unlocks_per_world}, "
-                                 f"{unlocked}/20 levels)", "game")
+                    msg = self._process_item(item, game, sp)
+                    if msg:
+                        self.log(f"Applied: {msg}", "game")
 
-                # --- Read game state ---
-                try:
-                    state = game.get_state()
-                except Exception:
-                    if self.goal_completed:
-                        await asyncio.sleep(0.5)
-                        continue
-                    await asyncio.sleep(0.1)
-                    continue
+                    # Check goal after each item
+                    if self._check_goal(goal, boss_tokens_enabled):
+                        await self.send_goal_complete()
 
+                    # Check bandage milestones on bandage receipt
+                    if item["id"] == ITEM_BANDAGE and achievements_enabled:
+                        ach_checks = []
+                        for threshold, ach_name in BANDAGE_MILESTONE_NAMES.items():
+                            if threshold not in milestones_sent:
+                                if threshold >= 70 and not dark_enabled:
+                                    continue
+                                if self.bandage_count >= threshold:
+                                    milestones_sent.add(threshold)
+                                    loc = self.loc_id(ach_name)
+                                    if loc and loc not in self.locations_checked:
+                                        ach_checks.append(loc)
+                                        self.log(f"Achievement: {ach_name}", "success")
+                        if ach_checks:
+                            await self.send_location_checks(ach_checks)
+
+                # Read game state
+                state = game.get_state()
                 if state is None:
                     await asyncio.sleep(0.1)
                     continue
@@ -1746,13 +1837,6 @@ class APClient:
                 ui_state = state["ui_state"]
                 trans = state["trans"]
 
-                # Debug boss state changes
-                if level == 99 or last_level == 99:
-                    if playing != last_playing or level != last_level:
-                        self.log(f"DEBUG BOSS: playing={last_playing}->{playing} "
-                                 f"level={last_level}->{level} world={world}", "debug")
-
-                # Skip bad reads
                 if playing < 0 or world < 0 or level < -1:
                     await asyncio.sleep(0.01)
                     last_playing, last_world, last_level = playing, world, level
@@ -1761,79 +1845,115 @@ class APClient:
 
                 actual_level = level if 0 <= level < 99 else -1
                 in_warp = is_warp(lvl_type)
-                last_in_warp = is_warp(last_lvl_type)
                 sp = game.get_sp()
-
-                # Debug: log any lvl_type change while playing
-                if playing == 1 and lvl_type != last_lvl_type:
-                    self.log(f"DEBUG lvl_type change: {last_lvl_type}->{lvl_type} "
-                             f"W{world} L{level} in_warp={in_warp}", "debug")
-
                 if not sp:
                     await asyncio.sleep(0.01)
                     last_playing, last_world, last_level = playing, world, level
                     last_beaten, last_lvl_type = beaten, lvl_type
                     continue
 
-                # Detect warp entry from within a level (e.g., entering Space Boy
-                # from dark level 1-13X).  The level index may not change, so the
-                # mid-play handler won't fire â€” take the snapshot here instead.
-                if playing == 1 and in_warp and world not in warp_entry_slots:
+                # Clear snapshots on world change
+                if world != last_world and last_world > 0 and world > 0:
+                    entry_comp.clear()
+                    entry_region.clear()
+                    entry_dual.clear()
+                    warp_entry_slots.clear()
+                    warp_entry_full.clear()
+                    # Reset deathless trackers when changing worlds
+                    deathless_tracker.clear()
+
+                # Ensure warp slots captured while playing (safety net)
+                if playing == 1 and world <= 5 and world not in warp_entry_slots:
                     warp_entry_slots[world] = game.read_warp_slots(sp, world)
                     warp_entry_full[world] = game.read_warp_slots_full(sp, world)
-                    slots = warp_entry_slots[world]
-                    nonzero = [(i, v) for i, v in enumerate(slots) if v > 0]
-                    self.log(f"DEBUG: Warp snapshot W{world} "
-                             f"(lvl_type {last_lvl_type}->{lvl_type}) "
-                             f"nonzero: {nonzero}", "debug")
 
-                # --- World unlock + character bitmask enforcement ---
+                # --- World select enforcement ---
                 on_world_select = (
                     (level == 99 and ui_state == 3 and trans == 0) or
                     (level == 0 and playing == 0)
                 )
                 if on_world_select:
-                    bitmask = sum(1 << (w - 1) for w in self.allowed_worlds)
+                    bitmask = self._compute_world_bitmask()
                     game.set_world_unlock(sp, bitmask)
-                    # Enforce character bitmask (game recalculates from bandage counts)
                     game.set_char_bitmask(sp, self.character_bits)
-                    # Enforce boss counters (game overwrites on level completion)
-                    if boss_tokens_enabled:
-                        self._enforce_boss_counters(game, sp, boss_token_costs)
-                    if dark_lock_enabled:
+                    self._enforce_boss_counters(game, sp, boss_req)
+                    if dark_enabled:
                         self._enforce_dark_locks(game, sp)
 
-                # A+ sweep on level select: runs on first arrival AND periodically
+                # Level select: sweep + enforce
                 on_level_select = (playing == 0 and ui_state == 1 and 1 <= world <= 7)
-                if on_level_select and aplus_enabled:
-                    # Run sweep on first arrival (last poll wasn't level select)
-                    # or periodically every ~500 polls (~0.5 seconds)
+                if on_level_select:
                     just_arrived = (last_playing == 1 or last_ui_state != 1)
-                    if just_arrived or poll_count % 500 == 499:
-                        sweep_checks = self._aplus_sweep(
-                            game, sp, world, aplus_enabled,
-                            dark_world_enabled, w7_enabled,
-                        )
+                    pending_recheck = (self._pending_aplus_recheck and poll_count % 50 == 0)
+                    if just_arrived or pending_recheck or poll_count % 500 == 499:
+                        if dark_enabled:
+                            self._enforce_dark_locks(game, sp)
+                        sweep_checks = self._sweep_world(game, sp, world, dark_enabled, warps_completed)
                         if sweep_checks:
                             await self.send_location_checks(sweep_checks)
+                        # Achievement check after sweep
+                        if achievements_enabled:
+                            ach_checks = []
+                            self._check_achievements(
+                                game, sp, ach_checks,
+                                achievements_enabled, dark_enabled,
+                                worlds_cleared, worlds_dark_cleared,
+                                milestones_sent, warp_milestones_sent,
+                                warps_completed,
+                                speedrun_sent, speedrun_enabled,
+                                deathless_sent, deathless_enabled,
+                            )
+                            if deathless_enabled:
+                                self._check_deathless(
+                                    game, sp, ach_checks,
+                                    deathless_enabled, dark_enabled,
+                                    deathless_sent, deathless_tracker,
+                                )
+                            if ach_checks:
+                                await self.send_location_checks(ach_checks)
 
+                # Kick from unauthorized world
                 if (playing == 0 and ui_state == 1 and 0 <= level <= 20
                         and world not in self.allowed_worlds and world > 0):
-                    bitmask = sum(1 << (w - 1) for w in self.allowed_worlds)
+                    bitmask = self._compute_world_bitmask()
                     game.set_world_unlock(sp, bitmask)
                     now = time.time()
                     if now - esc_cooldown > 0.3:
-                        self.log(f"Unauthorized world {world} - kicking to world select", "game")
+                        self.log(f"Unauthorized world {world} - kicking", "game")
                         game.send_esc()
                         esc_cooldown = now
 
-                # Enforce character bitmask + boss counters periodically (every ~64 polls)
-                if poll_count & 0x3F == 0:
+                # Character bitmask enforcement on menus
+                if playing == 0:
                     game.set_char_bitmask(sp, self.character_bits)
-                    if boss_tokens_enabled:
-                        self._enforce_boss_counters(game, sp, boss_token_costs)
-                    if dark_lock_enabled:
+
+                # Periodic enforcement
+                if poll_count & 0x3F == 0:
+                    if playing == 1:
+                        game.set_char_bitmask(sp, self.character_bits)
+                        # Check for deaths during gameplay (deathless tracking)
+                        if deathless_enabled and not in_warp:
+                            for dr in ("light", "dark"):
+                                tracker_key = (world, dr)
+                                tracker = deathless_tracker.get(tracker_key)
+                                if tracker and tracker.get('active'):
+                                    current_deaths = game.read_death_count(sp)
+                                    entry_deaths = tracker.get('death_count_at_entry', -1)
+                                    if current_deaths >= 0 and entry_deaths >= 0 and current_deaths > entry_deaths:
+                                        tracker['active'] = False
+                                        tracker['levels_done'].clear()
+                    self._enforce_boss_counters(game, sp, boss_req)
+                    if dark_enabled:
                         self._enforce_dark_locks(game, sp)
+
+                    # Process pending A+ rechecks (time wasn't flushed on first read)
+                    if self._pending_aplus_recheck:
+                        recheck_checks = []
+                        for (rw, rli, rregion) in list(self._pending_aplus_recheck):
+                            self._check_aplus_location(
+                                game, sp, rw, rli, rregion, recheck_checks)
+                        if recheck_checks:
+                            await self.send_location_checks(recheck_checks)
 
                 # --- Pending boss check ---
                 if pending_boss_world > 0:
@@ -1846,65 +1966,51 @@ class APClient:
                             boss_confirmed = (playing == 0 and ui_state == 3)
 
                         if boss_confirmed:
-                            if pending_boss_world == 6 and pending_boss_dark and dark_world_enabled:
-                                loc_id = dark_boss_location_id()
-                                boss_name = "Dr. Fetus (Dark)"
-                            else:
-                                loc_id = boss_location_id(pending_boss_world)
-                                boss_name = WORLD_NAMES.get(pending_boss_world, '?')
+                            # Check access rules before sending boss check
+                            can_send = self._can_send_boss_check(
+                                pending_boss_world, pending_boss_dark, boss_req)
+                            loc_name = boss_location_name(pending_boss_world, pending_boss_dark)
+                            if can_send and loc_name:
+                                loc = self.loc_id(loc_name)
+                                if loc and loc not in self.locations_checked:
+                                    await self.send_location_checks([loc])
+                                    if not pending_boss_dark:
+                                        bosses_beaten.add(pending_boss_world)
+                                    self.log(f"Boss defeated: {loc_name}", "success")
+                            elif not can_send and loc_name:
+                                self.log(f"Boss defeated but requirements not met for: {loc_name}", "game")
 
-                            if loc_id not in self.locations_checked:
-                                await self.send_location_checks([loc_id])
-                                if not pending_boss_dark:
-                                    bosses_beaten.add(pending_boss_world)
-                                self.log(f"Boss defeated: {boss_name}", "success")
+                            # Cutscene check (uses boss_req or lw_drfetus rules)
+                            can_send_cs = self._can_send_cutscene_check(
+                                pending_boss_world, boss_req)
+                            cs_name = cutscene_location_name(pending_boss_world)
+                            if can_send_cs and cs_name and pending_boss_world not in cutscenes_checked:
+                                cs_loc = self.loc_id(cs_name)
+                                if cs_loc and cs_loc not in self.locations_checked:
+                                    await self.send_location_checks([cs_loc])
+                                    cutscenes_checked.add(pending_boss_world)
 
-                                # Goal checks
-                                if pending_boss_dark:
-                                    if goal == 3 and self.bandage_count >= bandages_req:
-                                        await self.send_goal_complete()
-                                    elif goal == 3:
-                                        self.log(f"Goal not met: need {bandages_req} bandages, "
-                                                 f"have {self.bandage_count}", "info")
-                                else:
-                                    if goal == 0 and pending_boss_world == 5:
-                                        if self.bandage_count >= bandages_req:
-                                            await self.send_goal_complete()
-                                        else:
-                                            self.log(f"Goal not met: need {bandages_req} bandages, "
-                                                     f"have {self.bandage_count}", "info")
-                                    elif goal == 1 and len(bosses_beaten) >= 5:
-                                        if self.bandage_count >= bandages_req:
-                                            await self.send_goal_complete()
-                                        else:
-                                            self.log(f"Goal not met: need {bandages_req} bandages, "
-                                                     f"have {self.bandage_count}", "info")
-                                    elif goal == 2 and pending_boss_world == 6:
-                                        if self.bandage_count >= bandages_req:
-                                            await self.send_goal_complete()
-                                        else:
-                                            self.log(f"Goal not met: need {bandages_req} bandages, "
-                                                     f"have {self.bandage_count}", "info")
-                            pending_boss_world = 0
-                            pending_boss_dark = False
+                            # Goal check after boss
+                            if self._check_goal(goal, boss_tokens_enabled):
+                                await self.send_goal_complete()
 
-                            # Achievement check after boss (boss can affect world state)
+                            # Achievement check after boss
                             if achievements_enabled:
                                 ach_checks = []
                                 self._check_achievements(
                                     game, sp, ach_checks,
-                                    achievements_enabled, worlds_cleared,
-                                    worlds_dark_cleared, milestones_sent,
-                                    aplus_enabled, warps_completed,
-                                    warp_milestones_sent, world_aplus_sent,
+                                    achievements_enabled, dark_enabled,
+                                    worlds_cleared, worlds_dark_cleared,
+                                    milestones_sent, warp_milestones_sent,
+                                    warps_completed,
+                                    speedrun_sent, speedrun_enabled,
+                                    deathless_sent, deathless_enabled,
                                 )
                                 if ach_checks:
                                     await self.send_location_checks(ach_checks)
 
-                            # Re-enforce boss counters after boss defeat
-                            if boss_tokens_enabled:
-                                self._enforce_boss_counters(game, sp, boss_token_costs)
-                            if dark_lock_enabled:
+                            self._enforce_boss_counters(game, sp, boss_req)
+                            if dark_enabled:
                                 self._enforce_dark_locks(game, sp)
                             pending_boss_world = 0
                             pending_boss_dark = False
@@ -1914,331 +2020,266 @@ class APClient:
                             pending_boss_dark = False
 
                 # --- Level entry snapshot ---
-                if playing == 1 and last_playing != 1 and actual_level >= 0:
-                    region = type_to_region(lvl_type)
-                    if in_warp:
-                        warp_entry_slots[world] = game.read_warp_slots(sp, world)
-                        warp_entry_full[world] = game.read_warp_slots_full(sp, world)
-                    elif region:
-                        key = f"{world}_{actual_level}_{lvl_type}"
-                        val = game.read_comp(sp, world, actual_level, region)
-                        time_val = game.read_time(sp, world, actual_level, region)
-                        entry_comp[key] = val
-                        entry_times[key] = (val, time_val)
+                if playing == 1 and last_playing != 1:
+                    if actual_level >= 0:
+                        region = type_to_region(lvl_type)
+                        # Always snapshot both light/dark comp AND warp slots,
+                        # since lvl_type is unreliable
+                        # warp from light world at entry time.
+                        key = (world, actual_level)
+                        lc = game.read_comp(sp, world, actual_level, "light")
+                        dc = game.read_comp(sp, world, actual_level, "dark")
+                        entry_dual[key] = (lc, dc)
 
-                # --- Beaten flag check (light world levels) ---
-                if beaten == 1 and last_beaten == 0:
-                    if lvl_type == TYPE_LIGHT and actual_level >= 0 and actual_level < 20:
-                        if 1 <= world <= 5:
-                            loc_id = level_location_id(world, actual_level)
-                            if loc_id not in self.locations_checked:
-                                await self.send_location_checks([loc_id])
-                        elif world == 6 and actual_level < 5:
-                            loc_id = w6_level_location_id(actual_level)
-                            if loc_id not in self.locations_checked:
-                                await self.send_location_checks([loc_id])
-                        elif world == 7 and w7_enabled:
-                            loc_id = w7_light_location_id(actual_level)
-                            if loc_id not in self.locations_checked:
-                                await self.send_location_checks([loc_id])
+                        
+                        if world <= 5 and world not in warp_entry_slots:
+                            warp_entry_slots[world] = game.read_warp_slots(sp, world)
+                            warp_entry_full[world] = game.read_warp_slots_full(sp, world)
+
+                        # Deathless tracking: record death count at level entry
+                        death_count = game.read_death_count(sp)
+                        for dr in ("light", "dark"):
+                            tracker_key = (world, dr)
+                            if deathless_enabled:
+                                if tracker_key not in deathless_tracker:
+                                    deathless_tracker[tracker_key] = {
+                                        'levels_done': set(),
+                                        'death_count_at_entry': death_count,
+                                        'active': True,
+                                    }
+                                else:
+                                    deathless_tracker[tracker_key]['death_count_at_entry'] = death_count
+
+                    # Boss entry: snapshot boss comp byte
+                    if level == 99 and 1 <= world <= 7:
+                        boss_entry_comp = game.read_boss_comp(sp, world)
+
 
                 # --- Mid-play level change ---
-                if (playing == 1 and last_playing == 1 and actual_level >= 0
+                # Also fires on boss transition (level → 99, actual_level = -1)
+                # so the previous level's A+ and completion get checked.
+                if (playing == 1 and last_playing == 1
+                        and (actual_level >= 0 or level == 99)
                         and (actual_level != last_level or world != last_world)
                         and last_level >= 0 and last_level < 99 and last_world > 0):
-                    # Wait for save data to settle (game may still be writing)
-                    await asyncio.sleep(0.05)
+                    await asyncio.sleep(0.15)  # 150ms: game needs time to flush IL time to save
                     sp2 = game.get_sp()
                     if sp2:
-                        # Warp mid-play: check via snapshot presence (independent
-                        # of entry_comp â€” avoids lvl_type race condition)
-                        if last_world in warp_entry_slots:
+                        checks = []
+                        was_warp_transition = False
+
+                        # Check if warp slots changed (warp zone activity)
+                        if last_world in warp_entry_slots and last_world <= 5:
                             entry_slots = warp_entry_slots[last_world]
                             current_slots = game.read_warp_slots(sp2, last_world)
-                            checks = []
-                            for si in range(NUM_WARP_SLOTS):
-                                sev = entry_slots[si]
-                                scv = current_slots[si]
-                                if sev < 0 or scv < 0 or sev == scv:
-                                    continue
-                                if not (sev & FLAG_BANDAGE) and (scv & FLAG_BANDAGE):
-                                    ca = comp_addr(last_world, si, "warp")
-                                    be = BANDAGE_BY_ADDR.get(ca)
-                                    if be:
-                                        checks.append(be["ap_id"])
-                                        self.log(f"Bandage: {be['name']} (mid-play)", "location")
-                                    game.write_comp(sp2, last_world, si, "warp",
-                                                    scv & MASK_CLEAR_BANDAGE)
-                            if checks:
-                                await self.send_location_checks(checks)
+                            if entry_slots != current_slots:
+                                was_warp_transition = True
+                                if bandages_enabled:
+                                    self._check_warp_bandages(
+                                        game, sp2, last_world, entry_slots, current_slots, checks)
+                                self._check_warp_completions(
+                                    game, sp2, last_world, checks, warps_completed)
+                                # Update warp entry slots
+                                warp_entry_slots[last_world] = current_slots
+                                warp_entry_full[last_world] = game.read_warp_slots_full(sp2, last_world)
 
-                        else:
-                            # Light/Dark mid-play
-                            old_region = type_to_region(last_lvl_type)
-                            old_key = f"{last_world}_{last_level}_{last_lvl_type}"
-                            ev = entry_comp.get(old_key, -1)
-                            checks = []
-
-                            if old_region in ("light", "dark") and ev >= 0:
-                                cv = game.read_comp(sp2, last_world, last_level, old_region)
-                                if ev >= 0 and cv >= 0 and ev != cv:
-                                    # Completion: bit 1 newly set
+                        # Check light/dark dual snapshot (only if not a warp transition)
+                        if not was_warp_transition:
+                            old_key = (last_world, last_level)
+                            dual = entry_dual.get(old_key)
+                            if dual:
+                                el, ed = dual
+                                cl = game.read_comp(sp2, last_world, last_level, "light")
+                                cd = game.read_comp(sp2, last_world, last_level, "dark")
+                                old_region = None
+                                if cl >= 0 and el >= 0 and cl != el:
+                                    old_region = "light"
+                                    ev, cv = el, cl
+                                elif cd >= 0 and ed >= 0 and cd != ed:
+                                    old_region = "dark"
+                                    ev, cv = ed, cd
+                                if old_region:
+                                    last_detected_region = old_region
+                                if old_region and ev >= 0 and cv >= 0:
+                                    # Completion
                                     if not (ev & FLAG_COMPLETE) and (cv & FLAG_COMPLETE):
-                                        loc_id = get_completion_location_id(last_world, last_level, old_region)
-                                        if loc_id:
-                                            # Check region-specific enablement
-                                            should_check = False
-                                            if old_region == "light":
-                                                should_check = (1 <= last_world <= 6) or (last_world == 7 and w7_enabled)
-                                            elif old_region == "dark":
-                                                should_check = dark_world_enabled or (last_world == 7 and w7_enabled)
-                                            if should_check and loc_id not in self.locations_checked:
-                                                checks.append(loc_id)
-
-                                    # Bandage: bit 0 newly set
-                                    if not (ev & FLAG_BANDAGE) and (cv & FLAG_BANDAGE):
-                                        ca = comp_addr(last_world, last_level, old_region)
-                                        be = BANDAGE_BY_ADDR.get(ca)
-                                        if be:
-                                            checks.append(be["ap_id"])
-                                            self.log(f"Bandage: {be['name']} (mid-play)", "location")
+                                        lv1 = last_level + 1
+                                        if old_region == "light":
+                                            cname = light_completion_name(last_world, lv1)
                                         else:
-                                            self.log(f"DEBUG: bandage bit set on W{last_world} L{last_level} "
-                                                     f"{old_region} (addr 0x{ca:04X}) but no mapping!", "debug")
-                                        game.write_comp(sp2, last_world, last_level, old_region,
-                                                        cv & MASK_CLEAR_BANDAGE)
+                                            cname = dark_completion_name(last_world, lv1)
+                                        if cname:
+                                            loc = self.loc_id(cname)
+                                            if loc and loc not in self.locations_checked:
+                                                checks.append(loc)
+                                    # Bandage
+                                    if bandages_enabled:
+                                        self._check_bandage(
+                                            game, sp2, last_world, last_level,
+                                            old_region, ev, cv, checks)
+                                # A+ check
+                                if old_region:
+                                    self._check_aplus_location(
+                                        game, sp2, last_world, last_level, old_region, checks)
+                                else:
+                                    self._check_aplus_location(
+                                        game, sp2, last_world, last_level, "light", checks)
+                                    if dark_enabled:
+                                        self._check_aplus_location(
+                                            game, sp2, last_world, last_level, "dark", checks)
 
-                                    # GotWarp bit
-                                    self._check_gotwarp(ev, cv, last_world, last_level, old_region, checks)
+                        if checks:
+                            await self.send_location_checks(checks)
 
-                                elif ev >= 0 and cv >= 0 and ev == cv:
-                                    self.log(f"DEBUG mid-play: no change W{last_world} L{last_level} "
-                                             f"T{last_lvl_type} ev={ev} cv={cv}", "debug")
-
-                            # A+ check runs regardless of entry snapshot
-                            if old_region in ("light", "dark"):
-                                self._check_aplus(game, sp2, last_world, last_level, old_region,
-                                                  checks, aplus_enabled)
-
-                            if checks:
-                                await self.send_location_checks(checks)
-
-                        # Snapshot the NEW level
-                        new_region = type_to_region(lvl_type)
-                        if in_warp:
+                        # Snapshot new level (always dual + warp)
+                        if actual_level >= 0:
+                            new_key = (world, actual_level)
+                            nl = game.read_comp(sp2, world, actual_level, "light")
+                            nd = game.read_comp(sp2, world, actual_level, "dark")
+                            entry_dual[new_key] = (nl, nd)
+                        if world <= 5:
                             warp_entry_slots[world] = game.read_warp_slots(sp2, world)
                             warp_entry_full[world] = game.read_warp_slots_full(sp2, world)
-                        elif new_region:
-                            new_key = f"{world}_{actual_level}_{lvl_type}"
-                            new_val = game.read_comp(sp2, world, actual_level, new_region)
-                            new_time = game.read_time(sp2, world, actual_level, new_region)
-                            entry_comp[new_key] = new_val
-                            entry_times[new_key] = (new_val, new_time)
+
+                        # Boss entry via mid-play (e.g. level 19 → 99)
+                        if level == 99 and 1 <= world <= 7:
+                            boss_entry_comp = game.read_boss_comp(sp2, world)
 
                 # --- Level exit ---
                 if playing == 0 and last_playing == 1:
-                    await asyncio.sleep(0.05)
+                    await asyncio.sleep(0.15)  # 150ms: game needs time to flush IL time to save
                     sp2 = game.get_sp()
-
                     if sp2 and last_world > 0:
-                        # Boss detection
+                        # Boss detection — compare boss comp byte to entry snapshot
                         if last_level == 99 and 1 <= last_world <= 7:
-                            pending_boss_world = last_world
-                            pending_boss_time = time.time()
-                            pending_boss_dark = (last_world == 6 and last_lvl_type == TYPE_DARK)
+                            current_comp = game.read_boss_comp(sp2, last_world)
+                            boss_changed = (boss_entry_comp >= 0
+                                            and current_comp >= 0
+                                            and current_comp != boss_entry_comp)
+                            if boss_changed:
+                                pending_boss_world = last_world
+                                pending_boss_time = time.time()
+                                pending_boss_dark = (last_world == 6 and last_detected_region == "dark")
+                                self.log(f"Boss defeated: W{last_world}", "success")
+                            boss_entry_comp = -1
 
                         exit_level = last_level if last_level < 99 else -1
-                        exit_type = last_lvl_type
-                        exit_region = type_to_region(exit_type)
-                        # Use entry snapshot presence to detect warp exit â€” lvl_type
-                        # can race back to 0 while playing is still 1, making
-                        # is_warp(last_lvl_type) unreliable.
-                        was_warp = last_world in warp_entry_slots
+                        checks = []
+                        warp_changed = False
+                        exit_region_detected = None
 
-                        if was_warp:
-                            # --- Warp exit ---
+                        # Check warp slot changes (detects warp zone activity)
+                        if last_world in warp_entry_slots and last_world <= 5:
                             entry_slots = warp_entry_slots[last_world]
                             current_slots = game.read_warp_slots(sp2, last_world)
-                            current_full = game.read_warp_slots_full(sp2, last_world)
-                            entry_full = warp_entry_full.get(last_world, [(-1, -1.0)] * 12)
-                            checks = []
+                            if entry_slots != current_slots:
+                                warp_changed = True
+                                if bandages_enabled:
+                                    self._check_warp_bandages(
+                                        game, sp2, last_world, entry_slots, current_slots, checks)
+                                self._check_warp_completions(
+                                    game, sp2, last_world, checks, warps_completed)
+                                # Update warp snapshots
+                                warp_entry_slots[last_world] = current_slots
+                                warp_entry_full[last_world] = game.read_warp_slots_full(sp2, last_world)
 
-                            # Debug: dump all changed slots
-                            for si in range(NUM_WARP_SLOTS):
-                                sev = entry_slots[si]
-                                scv = current_slots[si]
-                                if sev != scv:
-                                    ca = comp_addr(last_world, si, "warp")
-                                    be = BANDAGE_BY_ADDR.get(ca)
-                                    be_name = be['name'] if be else 'NO MAPPING'
-                                    self.log(f"DEBUG warp slot {si}: entry={sev} "
-                                             f"current={scv} (comp={scv&2} band={scv&1}) "
-                                             f"addr=0x{ca:04X} map={be_name}", "debug")
-                                elif sev > 0:
-                                    self.log(f"DEBUG warp slot {si}: unchanged={sev} "
-                                             f"(comp={sev&2} band={sev&1})", "debug")
+                        # Check light/dark dual snapshot (only if not a warp transition)
+                        if not warp_changed and exit_level >= 0:
+                            key = (last_world, exit_level)
+                            dual = entry_dual.get(key)
 
-                            for si in range(NUM_WARP_SLOTS):
-                                sev = entry_slots[si]
-                                scv = current_slots[si]
-                                if sev < 0 or scv < 0 or sev == scv:
-                                    continue
+                            if dual:
+                                el, ed = dual
+                                cl = game.read_comp(sp2, last_world, exit_level, "light")
+                                cd = game.read_comp(sp2, last_world, exit_level, "dark")
+                                if cl >= 0 and el >= 0 and cl != el:
+                                    exit_region_detected = "light"
+                                    ev, cv = el, cl
+                                elif cd >= 0 and ed >= 0 and cd != ed:
+                                    exit_region_detected = "dark"
+                                    ev, cv = ed, cd
 
-                                # Bandage
-                                if not (sev & FLAG_BANDAGE) and (scv & FLAG_BANDAGE):
-                                    ca = comp_addr(last_world, si, "warp")
-                                    be = BANDAGE_BY_ADDR.get(ca)
-                                    if be:
-                                        checks.append(be["ap_id"])
-                                        self.log(f"Bandage: {be['name']}", "location")
-                                    game.write_comp(sp2, last_world, si, "warp",
-                                                    scv & MASK_CLEAR_BANDAGE)
+                                if exit_region_detected:
+                                    last_detected_region = exit_region_detected
+                                if exit_region_detected and ev >= 0 and cv >= 0:
+                                    # Completion
+                                    if not (ev & FLAG_COMPLETE) and (cv & FLAG_COMPLETE):
+                                        lv1 = exit_level + 1
+                                        if exit_region_detected == "light":
+                                            cname = light_completion_name(last_world, lv1)
+                                        else:
+                                            cname = dark_completion_name(last_world, lv1)
+                                        if cname:
+                                            loc = self.loc_id(cname)
+                                            if loc and loc not in self.locations_checked:
+                                                checks.append(loc)
+                                    # Bandage
+                                    if bandages_enabled:
+                                        self._check_bandage(
+                                            game, sp2, last_world, exit_level,
+                                            exit_region_detected, ev, cv, checks)
 
-                                # Warp sub-level completion
-                                if not (sev & FLAG_COMPLETE) and (scv & FLAG_COMPLETE):
-                                    zone_idx = si // 3
-                                    sub = (si % 3) + 1
-                                    wname = WARP_ZONE_NAMES.get((last_world, zone_idx), f"Zone {zone_idx}")
-                                    self.log(f"Warp sub-level: {wname} {sub} complete", "game")
+                            # A+ check
+                            if exit_region_detected:
+                                self._check_aplus_location(
+                                    game, sp2, last_world, exit_level, exit_region_detected, checks)
+                            else:
+                                self._check_aplus_location(
+                                    game, sp2, last_world, exit_level, "light", checks)
+                                if dark_enabled:
+                                    self._check_aplus_location(
+                                        game, sp2, last_world, exit_level, "dark", checks)
 
-                            # Warp sub-level completion check (par-time based)
-                            for si in range(NUM_WARP_SLOTS):
-                                curr_comp, curr_time = current_full[si]
-                                if curr_comp < 0 or not (curr_comp & FLAG_COMPLETE):
-                                    continue
-                                if curr_time <= 0:
-                                    continue
-                                par = get_par_time(last_world, si, "warp")
-                                if par is None or curr_time > par:
-                                    continue
-                                old_comp, old_time = entry_full[si] if si < len(entry_full) else (-1, -1.0)
-                                was_aplus = (old_time > 0 and par is not None and old_time <= par)
-                                if not was_aplus:
-                                    aplus_id = get_aplus_location_id(last_world, si, "warp")
-                                    if aplus_id and aplus_id not in self.locations_checked and aplus_id not in self.aplus_logged:
-                                        self.aplus_logged.add(aplus_id)
-                                        zone_idx = si // 3
-                                        sub = (si % 3) + 1
-                                        wname = WARP_ZONE_NAMES.get((last_world, zone_idx), "?")
-                                        self.log(f"{wname} {sub} "
-                                                 f"({curr_time:.3f}s <= {par:.3f}s)", "location")
-                                        if aplus_enabled:
-                                            checks.append(aplus_id)
+                        if checks:
+                            await self.send_location_checks(checks)
 
-                            # Character unlock check
-                            self._check_character_unlock(game, sp2, last_world, checks,
-                                                         char_warp_enabled, characters_unlocked)
-
-                            # Warp zone completion check
-                            self._check_warp_completion(game, sp2, last_world, checks,
-                                                        warp_complete_enabled, warps_completed)
-
-                            if checks:
-                                await self.send_location_checks(checks)
-
-                            # Achievement check on every warp exit too
-                            if achievements_enabled:
-                                ach_checks = []
-                                self._check_achievements(
-                                    game, sp2, ach_checks,
-                                    achievements_enabled, worlds_cleared,
-                                    worlds_dark_cleared, milestones_sent,
-                                    aplus_enabled, warps_completed,
-                                    warp_milestones_sent, world_aplus_sent,
-                                )
-                                if ach_checks:
-                                    await self.send_location_checks(ach_checks)
-
-                            # Re-enforce boss counters after warp exit
-                            if boss_tokens_enabled:
-                                self._enforce_boss_counters(game, sp2, boss_token_costs)
-                            if dark_lock_enabled:
-                                self._enforce_dark_locks(game, sp2)
-                            game.set_char_bitmask(sp2, self.character_bits)
-
-                            # Clear warp snapshot so next non-warp exit
-                            # in same world doesn't re-enter this path
-                            del warp_entry_slots[last_world]
-                            warp_entry_full.pop(last_world, None)
-
-                        elif exit_level >= 0 and exit_region in ("light", "dark"):
-                            key = f"{last_world}_{exit_level}_{exit_type}"
-                            ev = entry_comp.get(key, -1)
-                            cv = game.read_comp(sp2, last_world, exit_level, exit_region)
-                            checks = []
-
-                            if ev >= 0 and cv >= 0 and ev != cv:
-                                # Completion
-                                if not (ev & FLAG_COMPLETE) and (cv & FLAG_COMPLETE):
-                                    loc_id = get_completion_location_id(last_world, exit_level, exit_region)
-                                    if loc_id:
-                                        should_check = False
-                                        if exit_region == "light":
-                                            should_check = (1 <= last_world <= 6) or (last_world == 7 and w7_enabled)
-                                        elif exit_region == "dark":
-                                            if 1 <= last_world <= 5:
-                                                should_check = dark_world_enabled
-                                            elif last_world == 6:
-                                                should_check = dark_world_enabled
-                                            elif last_world == 7:
-                                                should_check = w7_enabled
-                                        if should_check and loc_id not in self.locations_checked:
-                                            checks.append(loc_id)
-
-                                # Bandage
-                                if not (ev & FLAG_BANDAGE) and (cv & FLAG_BANDAGE):
-                                    ca = comp_addr(last_world, exit_level, exit_region)
-                                    be = BANDAGE_BY_ADDR.get(ca)
-                                    if be:
-                                        checks.append(be["ap_id"])
-                                        self.log(f"Bandage: {be['name']}", "location")
+                        # Deathless tracking on level exit
+                        if deathless_enabled and exit_region_detected in ("light", "dark"):
+                            tracker_key = (last_world, exit_region_detected)
+                            tracker = deathless_tracker.get(tracker_key)
+                            if tracker and tracker.get('active'):
+                                current_deaths = game.read_death_count(sp2)
+                                entry_deaths = tracker.get('death_count_at_entry', -1)
+                                if current_deaths >= 0 and entry_deaths >= 0:
+                                    if current_deaths > entry_deaths:
+                                        tracker['active'] = False
+                                        tracker['levels_done'].clear()
                                     else:
-                                        self.log(f"DEBUG: bandage bit set on W{last_world} L{exit_level} "
-                                                 f"{exit_region} (addr 0x{ca:04X}) but no mapping!", "debug")
-                                    game.write_comp(sp2, last_world, exit_level, exit_region,
-                                                    cv & MASK_CLEAR_BANDAGE)
+                                        cur_comp = game.read_comp(
+                                            sp2, last_world, exit_level, exit_region_detected)
+                                        if cur_comp >= 0 and (cur_comp & FLAG_COMPLETE):
+                                            tracker['levels_done'].add(exit_level)
 
-                                # GotWarp bit
-                                self._check_gotwarp(ev, cv, last_world, exit_level, exit_region, checks)
-
-                            elif ev >= 0 and cv >= 0 and ev == cv:
-                                self.log(f"DEBUG exit: no change W{last_world} L{exit_level} "
-                                         f"T{exit_type} ev={ev} cv={cv}", "debug")
-                            self._check_aplus(game, sp2, last_world, exit_level, exit_region,
-                                              checks, aplus_enabled)
-
-                            if checks:
-                                await self.send_location_checks(checks)
-
-                            # Achievement check runs on EVERY level exit, not just
-                            # when new checks fired â€” otherwise achievements for
-                            # already-checked levels (replays, reconnects) never trigger
-                            if achievements_enabled:
-                                ach_checks = []
-                                self._check_achievements(
-                                    game, sp2, ach_checks,
-                                    achievements_enabled, worlds_cleared,
-                                    worlds_dark_cleared, milestones_sent,
-                                    aplus_enabled, warps_completed,
-                                    warp_milestones_sent, world_aplus_sent,
-                                )
-                                if ach_checks:
-                                    await self.send_location_checks(ach_checks)
-
-                            # Re-enforce boss counters (game overwrites on level complete)
-                            if boss_tokens_enabled:
-                                self._enforce_boss_counters(game, sp2, boss_token_costs)
-                            if dark_lock_enabled:
-                                self._enforce_dark_locks(game, sp2)
-                            game.set_char_bitmask(sp2, self.character_bits)
-
-                        # A+ sweep: catch grades missed during mid-play transitions
-                        # (game may not flush best time to save until level select)
-                        if aplus_enabled and 1 <= last_world <= 7:
-                            sweep_checks = self._aplus_sweep(
-                                game, sp2, last_world, aplus_enabled,
-                                dark_world_enabled, w7_enabled,
+                        # Achievement check on every exit
+                        if achievements_enabled:
+                            ach_checks = []
+                            self._check_achievements(
+                                game, sp2, ach_checks,
+                                achievements_enabled, dark_enabled,
+                                worlds_cleared, worlds_dark_cleared,
+                                milestones_sent, warp_milestones_sent,
+                                warps_completed,
+                                speedrun_sent, speedrun_enabled,
+                                deathless_sent, deathless_enabled,
                             )
+                            if deathless_enabled:
+                                self._check_deathless(
+                                    game, sp2, ach_checks,
+                                    deathless_enabled, dark_enabled,
+                                    deathless_sent, deathless_tracker,
+                                )
+                            if ach_checks:
+                                await self.send_location_checks(ach_checks)
+
+                        self._enforce_boss_counters(game, sp2, boss_req)
+                        if dark_enabled:
+                            self._enforce_dark_locks(game, sp2)
+                        game.set_char_bitmask(sp2, self.character_bits)
+
+                        # A+ sweep on exit
+                        if 1 <= last_world <= 7:
+                            sweep_checks = self._sweep_world(
+                                game, sp2, last_world, dark_enabled, warps_completed)
                             if sweep_checks:
                                 await self.send_location_checks(sweep_checks)
 
@@ -2253,7 +2294,7 @@ class APClient:
                 if self.goal_completed:
                     await asyncio.sleep(1.0)
                 else:
-                    self.log(f"DEBUG loop error: {e}", "debug")
+                    self.log(f"Monitor error: {e}", "debug")
 
             await asyncio.sleep(0.001)
 
@@ -2266,9 +2307,9 @@ class APClient:
                 pass
 
 
-# =============================================================================
+
 # GUI APPLICATION
-# =============================================================================
+
 
 class SMBClientApp:
     def __init__(self):
@@ -2277,14 +2318,12 @@ class SMBClientApp:
         self.root.geometry("700x600")
         self.root.minsize(600, 500)
         self.root.configure(bg=DARK_BG)
-
         self.setup_dark_theme()
 
         self.client: Optional[APClient] = None
         self.game: Optional[GameInterface] = None
         self.client_thread = None
         self.loop = None
-
         self.config = self.load_config()
 
         self.server_var = tk.StringVar()
@@ -2293,7 +2332,6 @@ class SMBClientApp:
 
         self.create_widgets()
         self.load_settings()
-
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
         self.check_game_connection()
 
@@ -2304,7 +2342,7 @@ class SMBClientApp:
                         fieldbackground=DARK_ENTRY_BG)
         style.configure("TFrame", background=DARK_FRAME_BG)
         style.configure("TLabel", background=DARK_FRAME_BG, foreground=DARK_FG)
-        style.configure("TButton", background=DARK_ACCENT, foreground=DARK_FG,
+        style.configure("TButton", background=DARK_ACCENT, foreground="#ffffff",
                         borderwidth=1, focuscolor=DARK_ACCENT)
         style.map("TButton",
                   background=[("active", DARK_BORDER), ("pressed", DARK_BG)])
@@ -2313,56 +2351,73 @@ class SMBClientApp:
         style.configure("TLabelframe", background=DARK_FRAME_BG)
         style.configure("TLabelframe.Label", background=DARK_FRAME_BG,
                         foreground=DARK_FG)
+        # Header style
+        style.configure("Header.TLabel", background=DARK_FRAME_BG,
+                        foreground=SMB_RED, font=("Helvetica", 16, "bold"))
+        style.configure("Version.TLabel", background=DARK_FRAME_BG,
+                        foreground=SMB_BANDAGE, font=("Helvetica", 9))
 
     def create_widgets(self):
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
 
-        header = ttk.Label(main_frame, text=APP_NAME, font=("Helvetica", 14, "bold"))
-        header.pack(pady=(0, 5))
+        # Set window icon
+        try:
+            self._icon_img = tk.PhotoImage(data=MEATBOY_ICON_32)
+            self.root.iconphoto(True, self._icon_img)
+        except Exception:
+            pass
 
-        version_label = ttk.Label(main_frame, text=f"v{APP_VERSION}", font=("Helvetica", 9))
-        version_label.pack(pady=(0, 10))
+        # Header with Meat Boy icon
+        header_frame = ttk.Frame(main_frame)
+        header_frame.pack(pady=(0, 10))
+        try:
+            self._header_icon = tk.PhotoImage(data=MEATBOY_ICON_48)
+            icon_label = ttk.Label(header_frame, image=self._header_icon,
+                                    background=DARK_FRAME_BG)
+            icon_label.pack(side=tk.LEFT, padx=(0, 8))
+        except Exception:
+            pass
+        title_frame = ttk.Frame(header_frame)
+        title_frame.pack(side=tk.LEFT)
+        header = ttk.Label(title_frame, text="Super Meat Boy", style="Header.TLabel")
+        header.pack(anchor="w")
+        subtitle = ttk.Label(title_frame, text=f"Archipelago Client v{APP_VERSION}",
+                              style="Version.TLabel")
+        subtitle.pack(anchor="w")
 
         # Game status
         game_frame = ttk.LabelFrame(main_frame, text="Game Status", padding="10")
         game_frame.pack(fill=tk.X, pady=5)
-
         self.game_status = ttk.Label(game_frame, text="Checking...", font=("Helvetica", 10))
         self.game_status.pack(side=tk.LEFT)
-
-        self.refresh_btn = ttk.Button(game_frame, text="Refresh", command=self.check_game_connection)
+        self.refresh_btn = ttk.Button(game_frame, text="Refresh",
+                                       command=self.check_game_connection)
         self.refresh_btn.pack(side=tk.RIGHT)
 
-        # Connection settings
+        # Connection
         conn_frame = ttk.LabelFrame(main_frame, text="Connection", padding="10")
         conn_frame.pack(fill=tk.X, pady=5)
-
         ttk.Label(conn_frame, text="Server:").grid(row=0, column=0, sticky="w", pady=2)
         self.server_entry = ttk.Entry(conn_frame, textvariable=self.server_var, width=35)
         self.server_entry.grid(row=0, column=1, columnspan=2, sticky="ew", pady=2, padx=5)
-
         ttk.Label(conn_frame, text="Slot Name:").grid(row=1, column=0, sticky="w", pady=2)
         self.slot_entry = ttk.Entry(conn_frame, textvariable=self.slot_var, width=35)
         self.slot_entry.grid(row=1, column=1, columnspan=2, sticky="ew", pady=2, padx=5)
-
         ttk.Label(conn_frame, text="Password:").grid(row=2, column=0, sticky="w", pady=2)
-        self.password_entry = ttk.Entry(conn_frame, textvariable=self.password_var, show="*", width=35)
+        self.password_entry = ttk.Entry(conn_frame, textvariable=self.password_var,
+                                         show="*", width=35)
         self.password_entry.grid(row=2, column=1, columnspan=2, sticky="ew", pady=2, padx=5)
-
         conn_frame.columnconfigure(1, weight=1)
 
         # Buttons
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(fill=tk.X, pady=10)
-
         self.connect_btn = ttk.Button(btn_frame, text="Connect", command=self.connect)
         self.connect_btn.pack(side=tk.LEFT, padx=(0, 5))
-
-        self.disconnect_btn = ttk.Button(btn_frame, text="Disconnect", command=self.disconnect,
-                                         state=tk.DISABLED)
+        self.disconnect_btn = ttk.Button(btn_frame, text="Disconnect",
+                                          command=self.disconnect, state=tk.DISABLED)
         self.disconnect_btn.pack(side=tk.LEFT, padx=(0, 5))
-
         self.clear_btn = ttk.Button(btn_frame, text="Clear Log", command=self.clear_log)
         self.clear_btn.pack(side=tk.RIGHT)
 
@@ -2373,15 +2428,13 @@ class SMBClientApp:
         # Log
         log_frame = ttk.LabelFrame(main_frame, text="Log", padding="5")
         log_frame.pack(fill=tk.BOTH, expand=True, pady=5)
-
         self.log_text = scrolledtext.ScrolledText(
             log_frame, height=15, wrap=tk.WORD, state=tk.DISABLED,
             bg=DARK_ENTRY_BG, fg=DARK_FG, insertbackground=DARK_FG,
             font=("Consolas", 9),
         )
         self.log_text.pack(fill=tk.BOTH, expand=True)
-
-        self.log_text.tag_configure("info", foreground="#ffffff")
+        self.log_text.tag_configure("info", foreground="#e0e0e0")
         self.log_text.tag_configure("success", foreground="#00ff00")
         self.log_text.tag_configure("error", foreground="#ff4444")
         self.log_text.tag_configure("item", foreground="#ffcc00")
@@ -2393,16 +2446,14 @@ class SMBClientApp:
     def log(self, message: str, tag: str = "info"):
         def _log():
             self.log_text.configure(state=tk.NORMAL)
-            timestamp = datetime.now().strftime("%H:%M:%S")
-            self.log_text.insert(tk.END, f"[{timestamp}] {message}\n", tag)
+            ts = datetime.now().strftime("%H:%M:%S")
+            self.log_text.insert(tk.END, f"[{ts}] {message}\n", tag)
             self.log_text.see(tk.END)
             self.log_text.configure(state=tk.DISABLED)
         self.root.after(0, _log)
 
     def set_status(self, text: str, color: str):
-        def _status():
-            self.status_label.configure(text=text, foreground=color)
-        self.root.after(0, _status)
+        self.root.after(0, lambda: self.status_label.configure(text=text, foreground=color))
 
     def clear_log(self):
         self.log_text.configure(state=tk.NORMAL)
@@ -2423,19 +2474,16 @@ class SMBClientApp:
         try:
             if CONFIG_FILE.exists():
                 return json.loads(CONFIG_FILE.read_text())
-        except:
-            pass
+        except: pass
         return {}
 
     def save_config(self):
-        config = {
-            "server": self.server_var.get(),
-            "slot": self.slot_var.get(),
-        }
         try:
-            CONFIG_FILE.write_text(json.dumps(config, indent=2))
-        except:
-            pass
+            CONFIG_FILE.write_text(json.dumps({
+                "server": self.server_var.get(),
+                "slot": self.slot_var.get(),
+            }, indent=2))
+        except: pass
 
     def load_settings(self):
         self.server_var.set(self.config.get("server", "archipelago.gg:38281"))
@@ -2452,16 +2500,14 @@ class SMBClientApp:
             self.check_game_connection()
             if not self.game or not self.game.connected:
                 messagebox.showerror("Error",
-                    "Super Meat Boy is not running!\n\nPlease start the game first.")
+                    "Super Meat Boy is not running!\nPlease start the game first.")
                 return False
         return True
 
     def connect(self):
         if not self.validate_inputs():
             return
-
         self.save_config()
-
         self.connect_btn.configure(state=tk.DISABLED)
         self.disconnect_btn.configure(state=tk.NORMAL)
         self.server_entry.configure(state=tk.DISABLED)
@@ -2515,5 +2561,15 @@ class SMBClientApp:
 
 
 if __name__ == "__main__":
-    app = SMBClientApp()
-    app.run()
+    try:
+        app = SMBClientApp()
+        app.run()
+    except Exception as e:
+        # In frozen exe with no console, show error dialog
+        try:
+            import traceback
+            err = traceback.format_exc()
+            messagebox.showerror("SMB AP Client - Fatal Error", f"{e}\n\n{err}")
+        except:
+            pass
+        sys.exit(1)
