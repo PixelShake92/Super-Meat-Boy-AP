@@ -1,88 +1,80 @@
-# APWorld ID Offsets
 
 ITEM_OFFSET = 20101130000
 LOC_OFFSET  = 30112010000
 
 # Item IDs (from items.json)
 
-# Boss/progression keys
-ITEM_DW_DR_FETUS_KEY     = ITEM_OFFSET + 1
-ITEM_CH1_BOSS_KEY        = ITEM_OFFSET + 2
-ITEM_CH2_BOSS_KEY        = ITEM_OFFSET + 3
-ITEM_CH3_BOSS_KEY        = ITEM_OFFSET + 4
-ITEM_CH4_BOSS_KEY        = ITEM_OFFSET + 5
-ITEM_CH5_BOSS_KEY        = ITEM_OFFSET + 6
-ITEM_CH6_BOSS_KEY        = ITEM_OFFSET + 7
-ITEM_CH7_LW_LEVEL_KEY    = ITEM_OFFSET + 8
-ITEM_CH7_DW_LEVEL_KEY    = ITEM_OFFSET + 9
-ITEM_BANDAGE             = ITEM_OFFSET + 10
+# IDs MUST match apworld items.json order (items.py: item_id from 1, +OFFSET, file order).
+ITEM_CH1_BOSS_KEY        = ITEM_OFFSET + 1
+ITEM_CH2_BOSS_KEY        = ITEM_OFFSET + 2
+ITEM_CH3_BOSS_KEY        = ITEM_OFFSET + 3
+ITEM_CH4_BOSS_KEY        = ITEM_OFFSET + 4
+ITEM_CH5_BOSS_KEY        = ITEM_OFFSET + 5
+ITEM_CH6_BOSS_KEY        = ITEM_OFFSET + 6
+ITEM_CH7_LW_LEVEL_KEY    = ITEM_OFFSET + 7
+ITEM_CH7_DW_LEVEL_KEY    = ITEM_OFFSET + 8
+ITEM_BANDAGE             = ITEM_OFFSET + 9
 
-# Chapter (world) access keys
-ITEM_CH1_KEY = ITEM_OFFSET + 11
-ITEM_CH2_KEY = ITEM_OFFSET + 12
-ITEM_CH3_KEY = ITEM_OFFSET + 13
-ITEM_CH4_KEY = ITEM_OFFSET + 14
-ITEM_CH5_KEY = ITEM_OFFSET + 15
-ITEM_CH6_KEY = ITEM_OFFSET + 16
-ITEM_CH7_KEY = ITEM_OFFSET + 17
+ITEM_CH1_KEY = ITEM_OFFSET + 10
+ITEM_CH2_KEY = ITEM_OFFSET + 11
+ITEM_CH3_KEY = ITEM_OFFSET + 12
+ITEM_CH4_KEY = ITEM_OFFSET + 13
+ITEM_CH5_KEY = ITEM_OFFSET + 14
+ITEM_CH6_KEY = ITEM_OFFSET + 15
+ITEM_CH7_KEY = ITEM_OFFSET + 16
 
-# Characters
-ITEM_MEAT_BOY         = ITEM_OFFSET + 18
-ITEM_8BIT_MEAT_BOY    = ITEM_OFFSET + 19
-ITEM_4BIT_MEAT_BOY    = ITEM_OFFSET + 20
-ITEM_4COLOR_MEAT_BOY  = ITEM_OFFSET + 21
-ITEM_COMMANDER_VIDEO  = ITEM_OFFSET + 22
-ITEM_JILL             = ITEM_OFFSET + 23
-ITEM_OGMO             = ITEM_OFFSET + 24
-ITEM_FLYWRENCH        = ITEM_OFFSET + 25
-ITEM_THE_KID          = ITEM_OFFSET + 26
-ITEM_HEADCRAB         = ITEM_OFFSET + 27
-ITEM_ALIEN_HOMINID    = ITEM_OFFSET + 28
-ITEM_JOSEF            = ITEM_OFFSET + 29
-ITEM_NAIJA            = ITEM_OFFSET + 30
-ITEM_RUNMAN           = ITEM_OFFSET + 31
-ITEM_CAPTAIN_VIRIDIAN = ITEM_OFFSET + 32
-ITEM_STEVE            = ITEM_OFFSET + 33
-ITEM_MEAT_NINJA       = ITEM_OFFSET + 34
-ITEM_BROWNIE          = ITEM_OFFSET + 35
-ITEM_GOO_BALL         = ITEM_OFFSET + 36
-ITEM_BANDAGE_GIRL     = ITEM_OFFSET + 37
+ITEM_MEAT_BOY         = ITEM_OFFSET + 17
+ITEM_8BIT_MEAT_BOY    = ITEM_OFFSET + 18
+ITEM_4BIT_MEAT_BOY    = ITEM_OFFSET + 19
+ITEM_4COLOR_MEAT_BOY  = ITEM_OFFSET + 20
+ITEM_COMMANDER_VIDEO  = ITEM_OFFSET + 21
+ITEM_JILL             = ITEM_OFFSET + 22
+ITEM_OGMO             = ITEM_OFFSET + 23
+ITEM_FLYWRENCH        = ITEM_OFFSET + 24
+ITEM_THE_KID          = ITEM_OFFSET + 25
+ITEM_HEADCRAB         = ITEM_OFFSET + 26
+ITEM_ALIEN_HOMINID    = ITEM_OFFSET + 27
+ITEM_JOSEF            = ITEM_OFFSET + 28
+ITEM_NAIJA            = ITEM_OFFSET + 29
+ITEM_RUNMAN           = ITEM_OFFSET + 30
+ITEM_CAPTAIN_VIRIDIAN = ITEM_OFFSET + 31
+ITEM_STEVE            = ITEM_OFFSET + 32
+ITEM_MEAT_NINJA       = ITEM_OFFSET + 33
+ITEM_BROWNIE          = ITEM_OFFSET + 34
+ITEM_GOO_BALL         = ITEM_OFFSET + 35
+ITEM_BANDAGE_GIRL     = ITEM_OFFSET + 36
 
-# A+ Rank items (W-L format, IDs 38-162)
-# Generated: ITEM_OFFSET + 37 + (world_offset) + level
-# W1: 38-57, W2: 58-77, W3: 78-97, W4: 98-117, W5: 118-137
-# W6: 138-142, W7: 143-162
 def aplus_item_id(world, level_1based):
     """Get item ID for a W-L A+ Rank item."""
     if world <= 5:
-        return ITEM_OFFSET + 37 + (world - 1) * 20 + level_1based
+        return ITEM_OFFSET + 36 + (world - 1) * 20 + level_1based
     elif world == 6:
-        return ITEM_OFFSET + 137 + level_1based
+        return ITEM_OFFSET + 136 + level_1based
     elif world == 7:
-        return ITEM_OFFSET + 142 + level_1based
+        return ITEM_OFFSET + 141 + level_1based
     return None
 
-ITEM_BOSS_TOKEN       = ITEM_OFFSET + 163
-ITEM_VICTORY          = ITEM_OFFSET + 164
-ITEM_DEGRADED_BANDAGE = ITEM_OFFSET + 165
+ITEM_BOSS_TOKEN        = ITEM_OFFSET + 162
+ITEM_VICTORY           = ITEM_OFFSET + 163
+ITEM_ACHIEVEMENT_TOKEN = ITEM_OFFSET + 164
+ITEM_DEGRADED_BANDAGE  = ITEM_OFFSET + 165
+
+# DW Dr. Fetus Key: not a real apworld item. Inert -1 sentinel so client imports stay valid but never match.
+ITEM_DW_DR_FETUS_KEY   = -1
 
 
-# Item lookup tables
 
-# Chapter Key item ID → world number
 CHAPTER_KEY_ITEMS = {
     ITEM_CH1_KEY: 1, ITEM_CH2_KEY: 2, ITEM_CH3_KEY: 3,
     ITEM_CH4_KEY: 4, ITEM_CH5_KEY: 5, ITEM_CH6_KEY: 6,
     ITEM_CH7_KEY: 7,
 }
 
-# Boss Key item ID → chapter number
 BOSS_KEY_ITEMS = {
     ITEM_CH1_BOSS_KEY: 1, ITEM_CH2_BOSS_KEY: 2, ITEM_CH3_BOSS_KEY: 3,
     ITEM_CH4_BOSS_KEY: 4, ITEM_CH5_BOSS_KEY: 5, ITEM_CH6_BOSS_KEY: 6,
 }
 
-# Character item ID → (bitmask_bit, display_name)
 CHARACTER_ITEMS = {
     ITEM_MEAT_BOY:         (0,  "Meat Boy"),
     ITEM_4COLOR_MEAT_BOY:  (2,  "4-Color Meat Boy"),
@@ -106,7 +98,6 @@ CHARACTER_ITEMS = {
     ITEM_ALIEN_HOMINID:    (27, "Alien Hominid"),
 }
 
-# Build A+ Rank item ID → (world, level_1based) lookup
 APLUS_RANK_ITEMS = {}
 for w in range(1, 8):
     num = 5 if w == 6 else 20
@@ -116,7 +107,6 @@ for w in range(1, 8):
             APLUS_RANK_ITEMS[iid] = (w, lv)
 
 
-# World / level names
 
 
 WORLD_NAMES = {
@@ -152,13 +142,13 @@ LIGHT_LEVEL_NAMES = {
     (4, 4): "Hex", (4, 5): "Pyro", (4, 6): "Leviathan",
     (4, 7): "Rickets", (4, 8): "Weibe", (4, 9): "Deceiver",
     (4, 10): "Ball N Chain", (4, 11): "Oracle", (4, 12): "Big Brother",
-    (4, 13): "Lazy", (4, 15): "Abaddon", (4, 16): "Bow",
+    (4, 13): "Lazy", (4, 14): "Adversary", (4, 15): "Abaddon", (4, 16): "Bow",
     (4, 17): "Lost Highway", (4, 18): "Boris", (4, 19): "The Hive",
     (4, 20): "Babylon",
     (5, 1): "The Witness", (5, 2): "Evangel", (5, 3): "Ripe Decay",
     (5, 4): "Rise", (5, 5): "Panic Switch", (5, 6): "Left Behind",
     (5, 7): "The Fallen", (5, 8): "Descent", (5, 9): "Abomination",
-    (5, 10): "Grinding Mill", (5, 11): "Heretic", (5, 13): "The Lamb",
+    (5, 10): "Grinding Mill", (5, 11): "Heretic", (5, 12): "10 Horns", (5, 13): "The Lamb",
     (5, 14): "King Carrion", (5, 15): "The Flood", (5, 16): "Rotgut",
     (5, 17): "The Kingdom", (5, 18): "Gate of Ludd", (5, 19): "Wrath",
     (5, 20): "Judgment",
@@ -185,9 +175,9 @@ DARK_LEVEL_NAMES = {
     (2, 4): "Blown", (2, 5): "Agent Orange", (2, 6): "Cher Noble",
     (2, 7): "The Moon", (2, 8): "Grape Soda", (2, 9): "Centipede",
     (2, 10): "The Kracken", (2, 11): "Spineless", (2, 12): "Grey Matter",
-    (2, 13): "Dust Bunnies", (2, 14): "Back Track", (2, 15): "Insurance?",
+    (2, 13): "Dust Bunnies", (2, 14): "Crawl Space", (2, 15): "Insurance?",
     (2, 16): "P.S.Y.", (2, 17): "Nels Box", (2, 18): "Electrolysis",
-    (2, 19): "Tenebrae", (2, 20): "Back Track",
+    (2, 19): "Tenebrae", (2, 20): "Solemnity",
     (3, 1): "Step One", (3, 2): "Salt + Wound", (3, 3): "The Red Room",
     (3, 4): "Assemble", (3, 5): "Wasp", (3, 6): "Not You Again",
     (3, 7): "Pluck", (3, 8): "Salt Crown", (3, 9): "Goliath",
@@ -220,7 +210,6 @@ DARK_LEVEL_NAMES = {
     (7, 19): "XOXO", (7, 20): "Brag Rights",
 }
 
-# Warp zone names keyed by (world, host_level_1based)
 LW_WARP_NAMES = {
     (1, 5): "Sky Pup", (1, 12): "The Commander!", (1, 19): "Hand Held Hack",
     (2, 8): "The Bootlicker!", (2, 12): "Castle Crushers", (2, 15): "The Blood Shed",
@@ -234,29 +223,26 @@ DW_WARP_NAMES = {
     (4, 7): "MMMMMM", (5, 20): "Meat is Death",
 }
 
-# Boss location names
 BOSS_LOC_NAMES = {
     1: "1-Boss Lil' Slugger",
     2: "2-Boss C.H.A.D",
     3: "3-Boss Brownie",
     4: "4-Boss Little Horn",
     5: "5-Boss Larries Lament",
-    6: "6-Boss LW Dr. Fetus",  # Light world boss
+    6: "6-Boss LW Dr. Fetus",
 }
 DARK_BOSS_LOC_NAME = "6-Boss DW Dr. Fetus"
 
-# Cutscene (post-boss) location names
 CUTSCENE_LOC_NAMES = {
     1: "-1 |>'-'|>",
-    2: "-2 |'-'|>",
-    3: "-3 |'-'|>",
-    4: "-4 |'-'|>",
-    5: "-5 |'-'|>",
-    6: "-6 |'-'|>",
+    2: "-2 |>'-'|>",
+    3: "-3 |>'-'|>",
+    4: "-4 |>'-'|>",
+    5: "-5 |>'-'|>",
+    6: "-6 |>'-'|>",
 }
 
 
-# Location name generators
 
 
 def light_completion_name(world, level_1based):
@@ -348,13 +334,13 @@ def aplus_rank_item_name(world, level_1based):
 # Save data base addresses per world (offset from save_ptr)
 WORLD_BASES = {
     1: 0x0060, 2: 0x02D0, 3: 0x0540, 4: 0x07B0,
-    5: 0x0A20, 6: 0x0C90, 7: 0x0D08,  # W7 corrected
+    5: 0x0A20, 6: 0x0C90, 7: 0x0D08,
 }
 
 LIGHT_OFFSET = 0x000
 DARK_OFFSET  = 0x0F0
-WARP_OFFSET  = 0x1E0    # Works for W1-W4 (confirmed for W4)
-W6_DARK_OFFSET = 0x3C   # W6 has only 5 levels, compact layout
+WARP_OFFSET  = 0x1E0
+W6_DARK_OFFSET = 0x3C
 
 
 WARP_BASES = {
@@ -362,15 +348,14 @@ WARP_BASES = {
     2: 0x02D0 + 0x1E0,  # 0x04B0 (unconfirmed, matches layout)
     3: 0x0540 + 0x1E0,  # 0x0720 (unconfirmed, matches layout)
     4: 0x07B0 + 0x1E0,  # 0x0990 (CONFIRMED: MMMMMM data found here)
-    5: 0x0EC4,          # CONFIRMED: The Guy data found here
+    5: 0x0EC4,
 }
 
-SLOT_SIZE = 0x0C   # 12 bytes per level slot
-COMP_BYTE = 4      # Completion byte offset within slot
-TIME_BYTE = 0      # IL time (float) offset within slot
+SLOT_SIZE = 0x0C
+COMP_BYTE = 4
+TIME_BYTE = 0
 NUM_WARP_SLOTS = 12
 
-# Completion byte flags
 FLAG_BANDAGE = 0x01
 FLAG_COMPLETE = 0x02
 FLAG_WARP = 0x08
@@ -393,7 +378,7 @@ TYPE_LIGHT = 0
 TYPE_DARK = 1
 TYPE_WARP_MIN = 2
 TYPE_WARP_MAX = 5
-BOSS_LEVEL_INDEX = 20  # Level index 20 (0-based) = boss
+BOSS_LEVEL_INDEX = 20
 
 # Character bitmask offset from save_ptr
 CHARACTER_BITMASK_OFFSET = 0x3950
@@ -404,23 +389,37 @@ BOSS_COUNTER_OFFSETS = {
     4: 0x38FC, 5: 0x3908, 6: 0x3914,
 }
 
-# Native boss unlock thresholds
 BOSS_UNLOCK_THRESHOLDS = {
     1: 17, 2: 17, 3: 17, 4: 17, 5: 17, 6: 5,
 }
 
 
 
-# Address calculation helpers
+
+
+def _warp_slot_base(world, index):
+    """Get warp slot base address, handling W5 split layout.
+    W5 zone 1 (The Guy, slots 3-5) is at 0x0EC4.
+    All other W5 warp slots are at the generic WORLD_BASES[5]+WARP_OFFSET.
+    """
+    if world == 5 and not (3 <= index <= 5):
+        return WORLD_BASES[5] + WARP_OFFSET
+    warp_base = WARP_BASES.get(world)
+    if warp_base is None:
+        wb = WORLD_BASES.get(world)
+        if wb is None:
+            return None
+        return wb + WARP_OFFSET
+    return warp_base
 
 
 def comp_addr(world, index, region):
     """Get completion byte address offset from save_ptr."""
     if region == "warp":
-        warp_base = WARP_BASES.get(world)
-        if warp_base is None:
+        base = _warp_slot_base(world, index)
+        if base is None:
             return None
-        return warp_base + index * SLOT_SIZE + COMP_BYTE
+        return base + index * SLOT_SIZE + COMP_BYTE
     wb = WORLD_BASES.get(world)
     if wb is None:
         return None
@@ -435,10 +434,10 @@ def comp_addr(world, index, region):
 def time_addr(world, index, region):
     """Get IL time address offset from save_ptr."""
     if region == "warp":
-        warp_base = WARP_BASES.get(world)
-        if warp_base is None:
+        base = _warp_slot_base(world, index)
+        if base is None:
             return None
-        return warp_base + index * SLOT_SIZE + TIME_BYTE
+        return base + index * SLOT_SIZE + TIME_BYTE
     wb = WORLD_BASES.get(world)
     if wb is None:
         return None
@@ -453,10 +452,10 @@ def time_addr(world, index, region):
 def slot_addr(world, index, region):
     """Get slot base address offset from save_ptr."""
     if region == "warp":
-        warp_base = WARP_BASES.get(world)
-        if warp_base is None:
+        base = _warp_slot_base(world, index)
+        if base is None:
             return None
-        return warp_base + index * SLOT_SIZE
+        return base + index * SLOT_SIZE
     wb = WORLD_BASES.get(world)
     if wb is None:
         return None
@@ -470,23 +469,21 @@ def slot_addr(world, index, region):
 
 
 
-# Bandage grant targets (levels WITHOUT bandages, safe for count manipulation)
 
 
-# Levels that have bandages (world -> set of 1-based level nums)
 LIGHT_BANDAGE_LEVELS = {
     1: {4, 7, 9, 11, 13, 18, 20},
     2: {2, 5, 10, 13, 16, 18, 20},
     3: {1, 2, 4, 10, 11, 18, 20},
     4: {2, 6, 9, 13, 16, 17, 20},
-    5: {3, 5, 9, 16, 18, 20},
+    5: {3, 5, 9, 12, 16, 18, 20},
 }
 
 DARK_BANDAGE_LEVELS = {
-    1: {3, 5, 10, 14, 15, 19},
+    1: {3, 5, 10, 14, 15, 17, 19},
     2: {4, 6, 7, 10, 12, 15, 16},
     3: {3, 5, 6, 7, 14, 16, 19},
-    4: {6, 8, 10, 14, 18, 19},
+    4: {3, 4, 8, 10, 14, 18, 19},
     5: {4, 5, 8, 10, 11, 17, 18},
 }
 
@@ -497,19 +494,18 @@ for w in range(1, 6):
         lv1 = li + 1
         if lv1 not in has:
             BANDAGE_GRANT_TARGETS.append((w, li, "light"))
-# Add dark world non-bandage levels as additional targets
 for w in range(1, 6):
+    has = DARK_BANDAGE_LEVELS.get(w, set())
     for li in range(20):
-        BANDAGE_GRANT_TARGETS.append((w, li, "dark"))
+        lv1 = li + 1
+        if lv1 not in has:
+            BANDAGE_GRANT_TARGETS.append((w, li, "dark"))
 
 
 
-# Par times for A+ detection (from SMBDatabase.cs)
 
 
-# Par times extracted from SMBDatabase.cs ParTimes array
 PAR_TIMES = {
-    # World 1 Light (Forest)
     (1, 0, "light"): 3.0, (1, 1, "light"): 5.0, (1, 2, "light"): 9.0,
     (1, 3, "light"): 9.0, (1, 4, "light"): 11.0, (1, 5, "light"): 7.0,
     (1, 6, "light"): 5.0, (1, 7, "light"): 4.5, (1, 8, "light"): 8.0,
@@ -517,7 +513,6 @@ PAR_TIMES = {
     (1, 12, "light"): 7.0, (1, 13, "light"): 8.0, (1, 14, "light"): 10.0,
     (1, 15, "light"): 9.0, (1, 16, "light"): 9.0, (1, 17, "light"): 4.0,
     (1, 18, "light"): 20.0, (1, 19, "light"): 22.0,
-    # World 1 Dark
     (1, 0, "dark"): 3.0, (1, 1, "dark"): 4.5, (1, 2, "dark"): 10.0,
     (1, 3, "dark"): 12.0, (1, 4, "dark"): 10.0, (1, 5, "dark"): 7.0,
     (1, 6, "dark"): 5.0, (1, 7, "dark"): 6.0, (1, 8, "dark"): 11.0,
@@ -525,12 +520,10 @@ PAR_TIMES = {
     (1, 12, "dark"): 12.0, (1, 13, "dark"): 14.0, (1, 14, "dark"): 18.0,
     (1, 15, "dark"): 17.0, (1, 16, "dark"): 12.0, (1, 17, "dark"): 5.0,
     (1, 18, "dark"): 17.0, (1, 19, "dark"): 25.0,
-    # World 1 Warp
     (1, 0, "warp"): 5.0, (1, 1, "warp"): 5.0, (1, 2, "warp"): 5.0,
     (1, 3, "warp"): 5.0, (1, 4, "warp"): 5.0, (1, 5, "warp"): 5.0,
     (1, 6, "warp"): 5.0, (1, 7, "warp"): 5.0, (1, 8, "warp"): 5.0,
     (1, 9, "warp"): 5.0, (1, 10, "warp"): 5.0, (1, 11, "warp"): 5.0,
-    # World 2 Light (Hospital)
     (2, 0, "light"): 11.0, (2, 1, "light"): 10.5, (2, 2, "light"): 14.0,
     (2, 3, "light"): 9.5, (2, 4, "light"): 16.0, (2, 5, "light"): 15.0,
     (2, 6, "light"): 19.0, (2, 7, "light"): 25.0, (2, 8, "light"): 11.0,
@@ -538,7 +531,6 @@ PAR_TIMES = {
     (2, 12, "light"): 10.0, (2, 13, "light"): 16.0, (2, 14, "light"): 19.0,
     (2, 15, "light"): 15.0, (2, 16, "light"): 14.0, (2, 17, "light"): 16.5,
     (2, 18, "light"): 14.0, (2, 19, "light"): 24.0,
-    # World 2 Dark
     (2, 0, "dark"): 17.0, (2, 1, "dark"): 14.0, (2, 2, "dark"): 13.0,
     (2, 3, "dark"): 14.0, (2, 4, "dark"): 20.0, (2, 5, "dark"): 19.0,
     (2, 6, "dark"): 30.0, (2, 7, "dark"): 33.0, (2, 8, "dark"): 14.0,
@@ -546,12 +538,10 @@ PAR_TIMES = {
     (2, 12, "dark"): 11.0, (2, 13, "dark"): 31.0, (2, 14, "dark"): 32.0,
     (2, 15, "dark"): 16.0, (2, 16, "dark"): 12.0, (2, 17, "dark"): 17.0,
     (2, 18, "dark"): 26.0, (2, 19, "dark"): 36.0,
-    # World 2 Warp
     (2, 0, "warp"): 5.0, (2, 1, "warp"): 5.0, (2, 2, "warp"): 5.0,
     (2, 3, "warp"): 5.0, (2, 4, "warp"): 5.0, (2, 5, "warp"): 5.0,
     (2, 6, "warp"): 5.0, (2, 7, "warp"): 5.0, (2, 8, "warp"): 5.0,
     (2, 9, "warp"): 5.0, (2, 10, "warp"): 5.0, (2, 11, "warp"): 5.0,
-    # World 3 Light (Salt Factory)
     (3, 0, "light"): 9.5, (3, 1, "light"): 8.3, (3, 2, "light"): 16.0,
     (3, 3, "light"): 12.0, (3, 4, "light"): 12.2, (3, 5, "light"): 4.5,
     (3, 6, "light"): 12.4, (3, 7, "light"): 8.3, (3, 8, "light"): 12.5,
@@ -559,7 +549,6 @@ PAR_TIMES = {
     (3, 12, "light"): 15.8, (3, 13, "light"): 14.8, (3, 14, "light"): 14.8,
     (3, 15, "light"): 14.8, (3, 16, "light"): 10.5, (3, 17, "light"): 17.0,
     (3, 18, "light"): 17.0, (3, 19, "light"): 20.0,
-    # World 3 Dark
     (3, 0, "dark"): 23.0, (3, 1, "dark"): 16.0, (3, 2, "dark"): 16.5,
     (3, 3, "dark"): 20.0, (3, 4, "dark"): 28.0, (3, 5, "dark"): 20.0,
     (3, 6, "dark"): 15.5, (3, 7, "dark"): 17.5, (3, 8, "dark"): 21.0,
@@ -567,12 +556,10 @@ PAR_TIMES = {
     (3, 12, "dark"): 40.0, (3, 13, "dark"): 18.0, (3, 14, "dark"): 27.0,
     (3, 15, "dark"): 24.0, (3, 16, "dark"): 11.5, (3, 17, "dark"): 17.0,
     (3, 18, "dark"): 17.0, (3, 19, "dark"): 25.5,
-    # World 3 Warp
     (3, 0, "warp"): 5.0, (3, 1, "warp"): 5.0, (3, 2, "warp"): 5.0,
     (3, 3, "warp"): 5.0, (3, 4, "warp"): 5.0, (3, 5, "warp"): 5.0,
     (3, 6, "warp"): 5.0, (3, 7, "warp"): 5.0, (3, 8, "warp"): 5.0,
     (3, 9, "warp"): 5.0, (3, 10, "warp"): 5.0, (3, 11, "warp"): 5.0,
-    # World 4 Light (Hell)
     (4, 0, "light"): 11.0, (4, 1, "light"): 23.0, (4, 2, "light"): 11.5,
     (4, 3, "light"): 11.5, (4, 4, "light"): 12.0, (4, 5, "light"): 8.0,
     (4, 6, "light"): 17.0, (4, 7, "light"): 16.0, (4, 8, "light"): 6.0,
@@ -580,7 +567,6 @@ PAR_TIMES = {
     (4, 12, "light"): 11.5, (4, 13, "light"): 17.5, (4, 14, "light"): 9.0,
     (4, 15, "light"): 12.0, (4, 16, "light"): 12.0, (4, 17, "light"): 24.5,
     (4, 18, "light"): 14.0, (4, 19, "light"): 22.0,
-    # World 4 Dark
     (4, 0, "dark"): 19.0, (4, 1, "dark"): 16.5, (4, 2, "dark"): 12.0,
     (4, 3, "dark"): 17.5, (4, 4, "dark"): 14.0, (4, 5, "dark"): 19.0,
     (4, 6, "dark"): 18.0, (4, 7, "dark"): 19.0, (4, 8, "dark"): 10.5,
@@ -588,12 +574,10 @@ PAR_TIMES = {
     (4, 12, "dark"): 23.0, (4, 13, "dark"): 20.0, (4, 14, "dark"): 11.0,
     (4, 15, "dark"): 11.5, (4, 16, "dark"): 18.0, (4, 17, "dark"): 29.0,
     (4, 18, "dark"): 14.0, (4, 19, "dark"): 31.0,
-    # World 4 Warp
     (4, 0, "warp"): 5.0, (4, 1, "warp"): 5.0, (4, 2, "warp"): 5.0,
     (4, 3, "warp"): 5.0, (4, 4, "warp"): 5.0, (4, 5, "warp"): 5.0,
     (4, 6, "warp"): 5.0, (4, 7, "warp"): 5.0, (4, 8, "warp"): 5.0,
     (4, 9, "warp"): 5.0, (4, 10, "warp"): 5.0, (4, 11, "warp"): 5.0,
-    # World 5 Light (Rapture)
     (5, 0, "light"): 22.0, (5, 1, "light"): 13.0, (5, 2, "light"): 18.0,
     (5, 3, "light"): 13.5, (5, 4, "light"): 12.5, (5, 5, "light"): 11.0,
     (5, 6, "light"): 23.0, (5, 7, "light"): 20.0, (5, 8, "light"): 19.5,
@@ -601,7 +585,6 @@ PAR_TIMES = {
     (5, 12, "light"): 20.0, (5, 13, "light"): 30.5, (5, 14, "light"): 13.5,
     (5, 15, "light"): 30.0, (5, 16, "light"): 23.0, (5, 17, "light"): 17.0,
     (5, 18, "light"): 29.0, (5, 19, "light"): 32.0,
-    # World 5 Dark
     (5, 0, "dark"): 30.0, (5, 1, "dark"): 17.0, (5, 2, "dark"): 35.0,
     (5, 3, "dark"): 27.0, (5, 4, "dark"): 18.0, (5, 5, "dark"): 12.0,
     (5, 6, "dark"): 15.0, (5, 7, "dark"): 26.0, (5, 8, "dark"): 40.0,
@@ -609,18 +592,14 @@ PAR_TIMES = {
     (5, 12, "dark"): 25.0, (5, 13, "dark"): 60.0, (5, 14, "dark"): 15.0,
     (5, 15, "dark"): 32.0, (5, 16, "dark"): 27.0, (5, 17, "dark"): 19.0,
     (5, 18, "dark"): 41.0, (5, 19, "dark"): 48.0,
-    # World 5 Warp
     (5, 0, "warp"): 5.0, (5, 1, "warp"): 5.0, (5, 2, "warp"): 5.0,
     (5, 3, "warp"): 5.0, (5, 4, "warp"): 5.0, (5, 5, "warp"): 5.0,
     (5, 6, "warp"): 5.0, (5, 7, "warp"): 5.0, (5, 8, "warp"): 5.0,
     (5, 9, "warp"): 5.0, (5, 10, "warp"): 5.0, (5, 11, "warp"): 5.0,
-    # World 6 Light (The End)
     (6, 0, "light"): 30.0, (6, 1, "light"): 44.0, (6, 2, "light"): 34.0,
     (6, 3, "light"): 33.0, (6, 4, "light"): 44.0,
-    # World 6 Dark
     (6, 0, "dark"): 40.0, (6, 1, "dark"): 50.0, (6, 2, "dark"): 70.0,
     (6, 3, "dark"): 50.0, (6, 4, "dark"): 60.0,
-    # World 7 Light (Cotton Alley)
     (7, 0, "light"): 11.0, (7, 1, "light"): 13.0, (7, 2, "light"): 23.0,
     (7, 3, "light"): 26.0, (7, 4, "light"): 30.0, (7, 5, "light"): 7.5,
     (7, 6, "light"): 10.5, (7, 7, "light"): 26.0, (7, 8, "light"): 21.0,
@@ -628,7 +607,6 @@ PAR_TIMES = {
     (7, 12, "light"): 22.0, (7, 13, "light"): 40.0, (7, 14, "light"): 24.0,
     (7, 15, "light"): 20.0, (7, 16, "light"): 20.0, (7, 17, "light"): 21.0,
     (7, 18, "light"): 17.0, (7, 19, "light"): 45.0,
-    # World 7 Dark
     (7, 0, "dark"): 60.0, (7, 1, "dark"): 60.0, (7, 2, "dark"): 60.0,
     (7, 3, "dark"): 60.0, (7, 4, "dark"): 60.0, (7, 5, "dark"): 60.0,
     (7, 6, "dark"): 60.0, (7, 7, "dark"): 60.0, (7, 8, "dark"): 60.0,
@@ -651,7 +629,6 @@ def is_a_plus(time_val, world, level_0based, region):
 
 
 
-# Helper: type_to_region
 
 
 def type_to_region(lvl_type):
@@ -668,10 +645,8 @@ def is_warp(t):
 
 
 
-# Achievement location names
 
 
-# Warp zone milestones
 WARP_MILESTONE_NAMES = {
     1:  "Nostalgia (Unlock a retro warp zone)",
     5:  "Living In the Past (Complete 5 retro warp zones)",
@@ -679,7 +654,6 @@ WARP_MILESTONE_NAMES = {
     20: "Retro Rampage (Complete all retro warp zones)",
 }
 
-# World clear achievements
 WORLD_CLEAR_NAMES = {
     (6, "light"): "The End (Beat Chapter 6 Light World)",
     (6, "dark"):  "The Real End (Beat Chapter 6 Dark World)",
@@ -687,7 +661,6 @@ WORLD_CLEAR_NAMES = {
     (7, "dark"):  "Seneca Falls (Beat Chapter 7 Dark World)",
 }
 
-# Bandage milestone achievements
 BANDAGE_MILESTONE_NAMES = {
     10:  "I Have Crabs! (Collect 10 Bandages)",
     30:  "Metalhead (Collect 30 Bandages)",
@@ -697,14 +670,11 @@ BANDAGE_MILESTONE_NAMES = {
     100: "Accidental Arsonist (Collect 100 Bandages)",
 }
 
-# Petaphile achievement (can't be auto-detected from memory)
 PETAPHILE_NAME = 'Well look at you! (Type "petaphile" on the character select screen)'
 
 
-# Speedrun achievement data
 
 
-# Speedrun achievements: world -> (threshold_seconds, name)
 SPEEDRUN_ACHIEVEMENTS = {
     1: (265.0, "Rare (Speedrun The Forest in 265 Seconds)"),
     2: (460.0, "Medium Rare (Speedrun The Hospital in 460 seconds)"),
@@ -714,10 +684,8 @@ SPEEDRUN_ACHIEVEMENTS = {
 }
 
 
-# Deathless achievement data
 
 
-# Deathless achievements: (world, region) -> name
 DEATHLESS_ACHIEVEMENTS = {
     (1, "light"): "Wood Boy (Complete The Forest Light World Deathless)",
     (2, "light"): "Needle Boy (Complete The Hospital Light World Deathless)",
@@ -738,8 +706,55 @@ DEATHLESS_ACHIEVEMENTS = {
 # Death counter offset from save_ptr
 DEATH_COUNT_OFFSET = 0x38AC
 
+# Glitch level completion byte offsets from save_ptr (bit 0x20 = complete)
+FLAG_GLITCH_COMPLETE = 0x20  # confirmed: completing a glitch level sets bit 0x20
+# lives_byte: stores lives remaining (0x04|0x01 = accessible, 0x02 = complete)
+# access_byte: must be 0x01 for map click access (11 slots = 0x84 bytes after lives)
+GLITCH_LEVEL_OFFSETS = {
+    1: 0x38DC,
+    2: 0x38E8,
+    3: 0x38F4,
+    4: 0x3900,
+    5: 0x390C,
+    6: 0x3918,
+}
+GLITCH_ACCESS_OFFSETS = {
+    1: 0x3960,
+    2: 0x396C,
+    3: 0x3978,
+    4: 0x3984,
+    5: 0x3990,
+    6: 0x399C,
+}
 
-# Xmas level data
+
+# Glitch-level items: unused (glitch system removed); kept inert to avoid breaking imports.
+ITEM_GLITCH_LEVEL_1 = ITEM_OFFSET + 167
+ITEM_GLITCH_LEVEL_2 = ITEM_OFFSET + 168
+ITEM_GLITCH_LEVEL_3 = ITEM_OFFSET + 169
+ITEM_GLITCH_LEVEL_4 = ITEM_OFFSET + 170
+ITEM_GLITCH_LEVEL_5 = ITEM_OFFSET + 171
+ITEM_GLITCH_LEVEL_6 = ITEM_OFFSET + 172
+
+GLITCH_LEVEL_ITEMS = {
+    ITEM_GLITCH_LEVEL_1: 1,
+    ITEM_GLITCH_LEVEL_2: 2,
+    ITEM_GLITCH_LEVEL_3: 3,
+    ITEM_GLITCH_LEVEL_4: 4,
+    ITEM_GLITCH_LEVEL_5: 5,
+    ITEM_GLITCH_LEVEL_6: 6,
+}
+
+GLITCH_RUNTIME_FLAGS = {
+    1: 0x2F6358,
+    2: 0x2F6AC4,
+    3: 0x2F6358 + 0x076C * 2,
+    4: 0x2F6358 + 0x076C * 3,
+    5: 0x2F6358 + 0x076C * 4,
+    6: 0x2F6358 + 0x076C * 5,
+}
+
+
 
 
 XMAS_LEVEL_NAMES = {
@@ -765,11 +780,9 @@ def xmas_bandage_name(level_1based):
     name = XMAS_LEVEL_NAMES.get(level_1based)
     return f"I-{level_1based} {name} (Bandage)" if name else None
 
-# Xmas achievements
 XMAS_ACHIEVEMENT_NAMES = [
     "The Kids Xmas!",
     "The Golden Gift!",
 ]
 
-# Xmas world number in game memory (needs verification - likely 0 or 8)
-XMAS_WORLD = 0  # TODO: verify from memory research
+XMAS_WORLD = 0
