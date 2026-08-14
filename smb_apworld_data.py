@@ -59,7 +59,7 @@ ITEM_VICTORY           = ITEM_OFFSET + 163
 ITEM_ACHIEVEMENT_TOKEN = ITEM_OFFSET + 164
 ITEM_DEGRADED_BANDAGE  = ITEM_OFFSET + 165
 
-# DW Dr. Fetus Key: not a real apworld item. Inert -1 sentinel so client imports stay valid but never match.
+# DW Dr. Fetus Key: not a real apworld item. Inert -1 sentinel so imports stay valid.
 ITEM_DW_DR_FETUS_KEY   = -1
 
 
@@ -668,6 +668,14 @@ BANDAGE_MILESTONE_NAMES = {
     70:  "MS PAINT RULZ! (Collect 70 Bandages)",
     90:  "Vx6 (Collect 90 Bandages)",
     100: "Accidental Arsonist (Collect 100 Bandages)",
+}
+
+CHARACTER_ACHIEVEMENTS = {
+    1: "The Commander",
+    2: "The Bootlicker",
+    3: "The Jump man",
+    4: "The Fly Guy",
+    5: "The Kid",
 }
 
 PETAPHILE_NAME = 'Well look at you! (Type "petaphile" on the character select screen)'
