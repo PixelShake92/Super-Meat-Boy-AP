@@ -7,9 +7,16 @@ from tkinter import ttk, messagebox, scrolledtext
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Set, List, Tuple
+from collections import deque
 import time
 import os
 import sys
+import ssl
+try:
+    import certifi
+    _CERTIFI_CA = certifi.where()
+except Exception:
+    _CERTIFI_CA = None
 
 import ctypes
 user32 = ctypes.windll.user32
@@ -62,7 +69,7 @@ try:
     LIGHT_BANDAGE_LEVELS, DARK_BANDAGE_LEVELS,
     BANDAGE_GRANT_TARGETS,
     WARP_MILESTONE_NAMES, WORLD_CLEAR_NAMES,
-    BANDAGE_MILESTONE_NAMES,
+    BANDAGE_MILESTONE_NAMES, CHARACTER_ACHIEVEMENTS,
     SPEEDRUN_ACHIEVEMENTS, DEATHLESS_ACHIEVEMENTS,
     DEATH_COUNT_OFFSET,
     WORLD_BASES, LIGHT_OFFSET, DARK_OFFSET, WARP_BASES, WARP_OFFSET, W6_DARK_OFFSET,
@@ -430,6 +437,24 @@ class GameInterface:
         except:
             return -1
 
+    def credits_rolling(self) -> bool:
+        """True when the end-game credit roll is actively playing. Universal,
+        goal-agnostic ending signal. Current overlay-screen ptr at base+0x30B3E4;
+        credits-screen class vtable is base+0x28732C; its flags at +0x10C have
+        bit 31 (0x80000000) set only while actively scrolling. Bit 30 is merely
+        "loaded" (set on final-arena entry) and must NOT be used. All offsets are
+        base-relative (ASLR-safe). Empirically verified.
+        """
+        try:
+            screen = self.pm.read_uint(self.base + 0x30B3E4)
+            if not screen:
+                return False
+            if self.pm.read_uint(screen) != self.base + 0x28732C:
+                return False
+            return bool(self.pm.read_uint(screen + 0x10C) & 0x80000000)
+        except Exception:
+            return False
+
     def game_flash(self, duration: float = 0.4) -> bool:
         """Trigger the game's internal death-flash effect by sustaining writes
         to the flash object's intensity fields (~60 fps for `duration` seconds).
@@ -684,9 +709,24 @@ class APClient:
         return True
 
     def _dw_drfetus_accessible(self):
-        """Check dw_drfetus(): DW Dr. Fetus Key × dw_dr_fetus_req + token gating."""
+        """Mirror apworld dw_drfetus(): count A+ Rank items across accessible
+        chapters, require >= 85. No "DW Dr. Fetus Key" item exists (the old code
+        gated on dw_fetus_key_count, always 0, so this could never pass).
+        chapters 1-5 with key: 20 A+ each; ch6 (key+Meat Boy): levels 1-5;
+        ch7 (key+Bandage Girl): 20."""
         dw_req = self.slot_data.get("dw_dr_fetus_req", 85)
-        if self.dw_fetus_key_count < dw_req:
+        counter = 0
+        for w in range(1, 6):
+            if w in self.allowed_worlds:
+                counter += sum(1 for lv in range(1, 21)
+                               if (w, lv) in self.aplus_items_received)
+        if 6 in self.allowed_worlds and self._has_meat_boy():
+            counter += sum(1 for lv in range(1, 6)
+                           if (6, lv) in self.aplus_items_received)
+        if 7 in self.allowed_worlds and self._has_bandage_girl():
+            counter += sum(1 for lv in range(1, 21)
+                           if (7, lv) in self.aplus_items_received)
+        if counter < dw_req:
             return False
         goal = self._parse_goal(self.slot_data.get("goal", 0))
         tokens_enabled = self._parse_slot_bool(self.slot_data.get("boss_tokens", 0))
@@ -1049,6 +1089,13 @@ class APClient:
                 continue
             if total_warps_done >= threshold:
                 warp_milestones_sent.add(threshold)
+                loc = self.loc_id(ach_name)
+                if loc and loc not in self.locations_checked:
+                    checks.append(loc)
+                    self.log(f"Achievement: {ach_name}", "success")
+
+        for w, ach_name in CHARACTER_ACHIEVEMENTS.items():
+            if (w, 1) in warps_completed:
                 loc = self.loc_id(ach_name)
                 if loc and loc not in self.locations_checked:
                     checks.append(loc)
@@ -1731,30 +1778,66 @@ class APClient:
     async def run(self, game: GameInterface):
         self._running = True
         self.loop = asyncio.get_event_loop()
-        url = f"wss://{self.server}" if not self.server.startswith("ws") else self.server
         self.log(f"Connecting to {self.server}...", "info")
         self.set_status("Connecting...", "#ffcc00")
 
-        try:
-            async with websockets.connect(url, max_size=None) as ws:
-                self.ws = ws
-                self.log("WebSocket connected!", "success")
-                monitor_task = asyncio.create_task(self.game_monitor(game))
-                try:
-                    async for message in ws:
-                        if not self._running:
-                            break
-                        try:
-                            for msg in json.loads(message):
-                                await self.handle_message(msg)
-                        except json.JSONDecodeError:
-                            pass
-                except websockets.exceptions.ConnectionClosed as e:
-                    self.log(f"Connection closed: {e}", "error")
-                finally:
-                    monitor_task.cancel()
-        except Exception as e:
-            self.log(f"Connection error: {e}", "error")
+        server = self.server.strip()
+        host = server.split("//", 1)[-1]
+        is_local = host.startswith(("localhost", "127.0.0.1", "[::1]"))
+
+        def _sslctx():
+            try:
+                if _CERTIFI_CA:
+                    return ssl.create_default_context(cafile=_CERTIFI_CA)
+                return ssl.create_default_context()
+            except Exception:
+                return None
+
+        if server.startswith("wss://"):
+            attempts = [(server, _sslctx())]
+        elif server.startswith("ws://"):
+            attempts = [(server, None)]
+        elif is_local:
+            attempts = [(f"ws://{host}", None), (f"wss://{host}", _sslctx())]
+        else:
+            attempts = [(f"wss://{host}", _sslctx()), (f"ws://{host}", None)]
+
+        connected_ok = False
+        for _i, (url, sslctx) in enumerate(attempts):
+            is_last = (_i == len(attempts) - 1)
+            try:
+                kwargs = {"max_size": None}
+                if url.startswith("wss://") and sslctx is not None:
+                    kwargs["ssl"] = sslctx
+                async with websockets.connect(url, **kwargs) as ws:
+                    self.ws = ws
+                    self.log(f"WebSocket connected! ({url.split('://',1)[0]})", "success")
+                    connected_ok = True
+                    monitor_task = asyncio.create_task(self.game_monitor(game))
+                    try:
+                        async for message in ws:
+                            if not self._running:
+                                break
+                            try:
+                                for msg in json.loads(message):
+                                    await self.handle_message(msg)
+                            except json.JSONDecodeError:
+                                pass
+                    except websockets.exceptions.ConnectionClosed as e:
+                        self.log(f"Connection closed: {e}", "error")
+                    finally:
+                        monitor_task.cancel()
+                break
+            except Exception as e:
+                msg = str(e)
+                is_ssl_mismatch = ("WRONG_VERSION_NUMBER" in msg
+                                   or "SSL" in msg
+                                   or "wrong version" in msg.lower())
+                if is_last or not is_ssl_mismatch:
+                    self.log(f"Connection error: {e}", "error")
+                else:
+                    other = 'ws' if url.startswith('wss') else 'wss'
+                    self.log(f"{url.split('://',1)[0]}:// failed; trying {other}://...", "info")
 
         self.connected = False
         self.ws = None
@@ -1774,6 +1857,7 @@ class APClient:
         pending_boss_time = 0
         pending_boss_dark = False
         last_detected_region = None
+        boss_region_dark = None  # W6 boss region snapshotted in-play from 0x38C0
         warps_completed: Set[Tuple[int, int]] = set()
         bosses_beaten: Set[int] = set()
         worlds_cleared: Set[int] = set()
@@ -1932,6 +2016,11 @@ class APClient:
                 ui_state = state["ui_state"]
                 trans = state["trans"]
 
+                if (not self.goal_completed and poll_count % 30 == 0
+                        and game.credits_rolling()):
+                    self.log("Credits detected - goal complete!", "success")
+                    await self.send_goal_complete()
+
                 if playing < 0 or world < 0 or level < -1:
                     await asyncio.sleep(0.01)
                     last_playing, last_world, last_level = playing, world, level
@@ -1962,6 +2051,15 @@ class APClient:
                     warp_entry_slots.clear()
                     warp_entry_full.clear()
                     deathless_tracker.clear()
+
+                # Snapshot W6 boss region from sp+0x38C0 WHILE playing the boss
+                if playing == 1 and world == 6 and level == 99:
+                    try:
+                        boss_region_dark = (game.pm.read_uchar(sp + 0x38C0) == 1)
+                    except Exception:
+                        pass
+                elif playing == 1 and level != 99:
+                    boss_region_dark = None
 
                 if playing == 1 and world <= 5 and world not in warp_entry_slots:
                     warp_entry_slots[world] = game.read_warp_slots(sp, world)
@@ -2059,7 +2157,7 @@ class APClient:
                             await self.send_location_checks(recheck_checks)
 
                 if self.death_link_enabled and playing == 1:
-                    # DO NOT use lvl_type: its pointer chain (0x30a1a0, 0x3c68) is unreliable.
+                    # DO NOT use lvl_type: pointer chain (0x30a1a0, 0x3c68) is unreliable.
                     lv1 = level + 1
                     actual_lvl = level if 0 <= level < 99 else -1
 
@@ -2366,11 +2464,22 @@ class APClient:
                     await asyncio.sleep(0.15)
                     sp2 = game.get_sp()
                     if sp2 and last_world > 0:
-                        # DO NOT read the boss/glitch shared byte; use cutscene state (level-99 exit) instead.
+                        # DO NOT read boss/glitch shared byte; use cutscene state (level-99 exit).
                         if last_level == 99 and 1 <= last_world <= 7:
                             pending_boss_world = last_world
                             pending_boss_time = time.time()
-                            pending_boss_dark = (last_world == 6 and last_detected_region == "dark")
+                            # Use the region snapshotted in-play (0x38C0 reliable
+                            if last_world == 6:
+                                if boss_region_dark is not None:
+                                    pending_boss_dark = boss_region_dark
+                                else:
+                                    try:
+                                        pending_boss_dark = (game.pm.read_uchar(sp2 + 0x38C0) == 1)
+                                    except Exception:
+                                        pending_boss_dark = (last_detected_region == "dark")
+                            else:
+                                pending_boss_dark = False
+                            boss_region_dark = None
 
                         exit_level = last_level if last_level < 99 else -1
                         checks = []
