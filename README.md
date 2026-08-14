@@ -17,8 +17,6 @@ Shuffle level access, boss keys, characters, bandages, warp zones, and more acro
 - **Character shuffle** — Meat Boy, Bandage Girl, and unlockable characters distributed through the pool
 - **Multiple goal options** — Beat Larries, clear the light world, conquer the dark world, and more
 - **Boss token gating** — Optional progressive boss access tokens
-- **Real-time detection** — Level completions, A+ grades, bandages, and boss defeats detected instantly during gameplay
-
 ---
 
 ## Quick Start
@@ -53,7 +51,7 @@ The client reads Super Meat Boy's memory in real-time to detect player progress 
 - Achieving an A+ grade
 - Beating a boss
 - Completing a warp zone
-- World clears, speedruns, and deathless achievements
+- World clears, speedruns, and deathless achievements (currently an annoying bug with petaphile achievement though). 
 
 **Receiving items:**
 - Chapter Keys (unlock world access)
