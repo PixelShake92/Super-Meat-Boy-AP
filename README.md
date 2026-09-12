@@ -27,7 +27,7 @@ Shuffle level access, boss keys, characters, bandages, warp zones, and more acro
 4. **Run the client** — Launch `SMB_Archipelago_Client.exe`
 5. **Connect** to your Archipelago server and play!
 
-For detailed instructions, see the [Setup Guide](SETUP_GUIDE.md).
+For detailed instructions, see the [Setup Guide](https://github.com/PixelShake92/Super-Meat-Boy-AP/blob/main/SMB%20setup.md)
 
 ---
 
