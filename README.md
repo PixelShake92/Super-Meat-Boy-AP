@@ -23,7 +23,7 @@ Shuffle level access, boss keys, characters, bandages, warp zones, and more acro
 
 1. **Install the APWorld** — Copy `super_meat_boy.apworld` to your Archipelago `custom_worlds` folder
 2. **Back up your saves** — Copy `savegame.dat` from the Super Meat Boy `UserData` folder
-3. **Start a fresh save** in Super Meat Boy
+3. **Start a fresh save, this means delete your current one** in Super Meat Boy
 4. **Run the client** — Launch `SMB_Archipelago_Client.exe`
 5. **Connect** to your Archipelago server and play!
 
