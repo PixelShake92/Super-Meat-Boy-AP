@@ -2,7 +2,7 @@
 
 A full [Archipelago](https://archipelago.gg) multiworld randomiser for **Super Meat Boy** (PC/Steam).
 
-Shuffle level access, boss keys, characters, bandages, warp zones, and more across your multiworld. Race through randomized worlds while trading items with friends playing completely different games.
+Shuffle level access, boss keys, characters, bandages, warp zones, and more across your multiworld. Race through randomised worlds while trading items with friends playing completely different games.
 
 ---
 
