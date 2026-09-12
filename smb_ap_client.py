@@ -438,12 +438,7 @@ class GameInterface:
             return -1
 
     def credits_rolling(self) -> bool:
-        """True when the end-game credit roll is actively playing. Universal,
-        goal-agnostic ending signal. Current overlay-screen ptr at base+0x30B3E4;
-        credits-screen class vtable is base+0x28732C; its flags at +0x10C have
-        bit 31 (0x80000000) set only while actively scrolling. Bit 30 is merely
-        "loaded" (set on final-arena entry) and must NOT be used. All offsets are
-        base-relative (ASLR-safe). Empirically verified.
+        """True when the end-game credit roll is actively playing. This was a pain in the ass to solve.
         """
         try:
             screen = self.pm.read_uint(self.base + 0x30B3E4)
@@ -594,13 +589,6 @@ class APClient:
 
     @staticmethod
     def _parse_slot_bool(val) -> bool:
-        """Robustly parse a Toggle/DefaultOnToggle from slot_data.
-
-        Some apworld serializers emit toggles as strings ('true'/'false') instead
-        of booleans. Python's bool() treats any non-empty string as True, so a
-        plain bool(val) silently flips a YAML-disabled toggle to enabled.
-        This helper recognises the common falsy string forms.
-        """
         if isinstance(val, str):
             return val.strip().lower() not in (
                 "", "false", "0", "no", "off", "none", "null"
@@ -609,11 +597,6 @@ class APClient:
 
     def _chapters_set(self) -> set:
         """Normalised set of enabled chapter strings ('1'..'7') from slot_data.
-
-        Apworld sends `chapters` as an OptionSet of strings. Falls back to the
-        default base set 1-5 plus 6 if missing — never includes 7 implicitly,
-        since chapter 7 is only valid for ch7 goals (and the apworld auto-adds
-        it then via resolve_options).
         """
         raw = self.slot_data.get("chapters", None)
         if isinstance(raw, (list, set, tuple)):
@@ -655,7 +638,7 @@ class APClient:
         return bitmask
 
     
-    # BOSS GATING (matches APWorld rules.py exactly)
+    # BOSS GATING
     
 
 
@@ -709,11 +692,6 @@ class APClient:
         return True
 
     def _dw_drfetus_accessible(self):
-        """Mirror apworld dw_drfetus(): count A+ Rank items across accessible
-        chapters, require >= 85. No "DW Dr. Fetus Key" item exists (the old code
-        gated on dw_fetus_key_count, always 0, so this could never pass).
-        chapters 1-5 with key: 20 A+ each; ch6 (key+Meat Boy): levels 1-5;
-        ch7 (key+Bandage Girl): 20."""
         dw_req = self.slot_data.get("dw_dr_fetus_req", 85)
         counter = 0
         for w in range(1, 6):
@@ -1148,12 +1126,6 @@ class APClient:
                           deathless_enabled, dark_enabled, deathless_sent,
                           deathless_tracker):
         """Check deathless achievements based on tracked deathless runs.
-
-        deathless_tracker: dict of (world, region) -> {
-            'levels_done': set of level_0based completed without dying,
-            'death_count_at_start': int,
-            'active': bool
-        }
         """
         if not deathless_enabled:
             return
@@ -1220,14 +1192,6 @@ class APClient:
 
     def _boss_tokens_sufficient(self, goal, boss_tokens_enabled):
         """Check if enough Boss Tokens for the goal.
-
-        Mirrors APWorld rules.py boss_tokens_amount calculation exactly:
-          +1 per chapter in {1,2,3,4} enabled   (first four bosses)
-          +1 if "5" in chapters and goal != larries      (Larries)
-          +1 if "6" in chapters and goal != light_world  (LW Dr. Fetus)
-          +1 if "6" in chapters and dark_world and goal != dark_world
-                                                         (DW Dr. Fetus)
-        Reads the 'chapters' slot_data key (OptionSet, list/set of strings).
         """
         if not boss_tokens_enabled:
             return True
@@ -1475,10 +1439,8 @@ class APClient:
 
     async def set_death_link(self, enabled: bool):
         """Live-toggle DeathLink. Flips the runtime flag the poll loop reads
-        (controls sending our deaths) and syncs the DeathLink tag with the
-        server via ConnectUpdate (controls whether we receive others' deaths).
-        Safe to call while disconnected — the flag still updates and the tag
-        syncs on next connect through the normal handshake."""
+        (controls sending deaths) and syncs the DeathLink tag with the
+        server via ConnectUpdate"""
         self.death_link_enabled = enabled
         if not enabled:
             self._pending_death_link = False
@@ -2811,10 +2773,6 @@ class SMBClientApp:
         except: pass
 
     def on_toggle_death_link(self):
-        """UI button flipped. Push the new state into the client and sync the
-        server tag via the async loop. Works connected or not — when connected,
-        run_coroutine_threadsafe bridges to the client loop; when not, we just
-        stash the choice so it applies at next connect."""
         enabled = self.death_link_var.get()
         self.config["death_link"] = enabled
         self.save_config()
