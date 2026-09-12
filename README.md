@@ -99,7 +99,7 @@ Customise your experience through YAML options:
 | Boss door locked | Check your boss key count in the client log |
 | Stuck with no available checks | Check with other players — you may need items from them |
 
-See the [Setup Guide](SETUP_GUIDE.md) for more details.
+See the [Setup Guide]([SETUP_GUIDE.md](https://github.com/PixelShake92/Super-Meat-Boy-AP/blob/main/SMB%20setup.md)) for more details.
 
 ---
 
